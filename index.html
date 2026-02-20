@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v1.9 (階別ファイル対応)</title>
+    <title>水道屋アプリ v1.9.1 (PDFページ対応)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -44,7 +44,7 @@
 </div>
 
 <div id="controls">
-    <span class="label">現在の階に図面を読み込む:</span>
+    <span class="label">PDFの1枚目(1F) / 2枚目(2F) を読み込み:</span>
     <input type="file" id="upload-input" accept=".pdf,image/*" style="width:100%;">
     <hr>
     <div class="btn-group">
@@ -134,7 +134,6 @@
         if (!file) return;
         const container = document.getElementById('container-' + currentFloor);
         container.innerHTML = ''; 
-        
         const canvas = document.createElement('canvas');
         container.appendChild(canvas);
 
@@ -142,7 +141,12 @@
         reader.onload = async function() {
             if (file.type === "application/pdf") {
                 const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-                const page = await pdf.getPage(1);
+                
+                // 階数に応じてページを変える
+                let pageNum = (currentFloor === '1F') ? 1 : 2;
+                if (pdf.numPages < pageNum) pageNum = 1;
+
+                const page = await pdf.getPage(pageNum);
                 const vp = page.getViewport({scale: 2.0});
                 canvas.width = vp.width; canvas.height = vp.height;
                 await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
@@ -155,7 +159,7 @@
         reader.readAsArrayBuffer(file);
         canvas.onclick = (ev) => { handleCanvasClick(ev.offsetX, ev.offsetY, container); };
         toggleMenu();
-        e.target.value = ''; // 連続で同じファイルを選べるようにリセット
+        e.target.value = '';
     };
 
     function handleCanvasClick(x, y, container) {
