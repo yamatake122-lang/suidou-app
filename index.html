@@ -3,36 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>水道屋アプリ v1.4 (戻る機能付)</title>
+    <title>水道屋アプリ v1.5 (ルート描画)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
         #header { background: #333; color: white; padding: 10px; text-align: center; }
-        #controls { padding: 10px; background: #f4f4f4; border-bottom: 1px solid #ccc; z-index: 10; font-size: 14px; }
+        #controls { padding: 10px; background: #f4f4f4; border-bottom: 1px solid #ccc; z-index: 10; }
         #canvas-container { flex: 1; position: relative; overflow: auto; background: #ddd; }
         canvas { display: block; cursor: crosshair; }
-        .marker { position: absolute; width: 12px; height: 12px; background: rgba(0, 123, 255, 0.8); border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; }
-        .btn-blue { background: #007bff; color: white; }
-        .btn-green { background: #28a745; color: white; }
-        .btn-gray { background: #6c757d; color: white; }
-        .btn-red { background: #dc3545; color: white; }
-        .active { background: #ffc107 !important; color: black !important; font-weight: bold; }
-        .info-text { margin-top: 5px; color: #555; font-weight: bold; }
+        .marker { position: absolute; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        .pipe-line { position: absolute; height: 4px; transform-origin: 0 50%; pointer-events: none; opacity: 0.6; }
+        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; font-weight: bold; }
+        .btn-scale { background: #555; color: white; }
+        .btn-undo { background: #eee; color: #333; border: 1px solid #ccc; }
+        .type-selector { margin: 10px 0; display: flex; gap: 5px; }
+        .type-btn { flex: 1; border: 2px solid transparent; }
+        .active { border-color: #000 !important; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        #status-msg { font-size: 12px; color: #666; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div id="header">水道屋アプリ：戻るボタン追加版</div>
+<div id="header">水道屋アプリ：配管ルート描画</div>
 
 <div id="controls">
     <input type="file" id="upload" accept="image/*,.pdf">
-    <hr>
-    <button id="scale-btn" class="btn-blue">① スケール設定</button>
-    <button id="auto-btn" class="btn-green">② 1mピッチ配置</button>
-    <button id="undo-btn" class="btn-gray">↩ 一つ戻る</button>
-    <button onclick="location.reload()" class="btn-red">リセット</button>
-    <div class="info-text" id="status-msg">図面を読み込んでください</div>
+    <button id="scale-btn" class="btn-scale">📏 スケール設定(1m)</button>
+    <button id="undo-btn" class="btn-undo">↩ 戻る</button>
+
+    <div class="type-selector">
+        <button class="type-btn active" data-type="haisui" style="background:#808080; color:white;">排水 (グレー)</button>
+        <button class="type-btn" data-type="kyusui" style="background:#0000ff; color:white;">給水 (青)</button>
+        <button class="type-btn" data-type="kyuto" style="background:#ff0000; color:white;">給湯 (赤)</button>
+    </div>
+    <div id="status-msg">①スケール設定後、種類を選んでルートをクリック</div>
 </div>
 
 <div id="canvas-container">
@@ -43,61 +47,51 @@
     const url = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
     pdfjsLib.GlobalWorkerOptions.workerSrc = url;
 
+    const container = document.getElementById('canvas-container');
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
-    const container = document.getElementById('canvas-container');
     const statusMsg = document.getElementById('status-msg');
     
-    let pixelsPerMeter = 0; 
-    let mode = 'idle';
+    let pixelsPerMeter = 0;
+    let currentType = 'haisui';
+    let mode = 'route'; // scale or route
     let firstPoint = null;
-    let history = []; // 操作の履歴を保存する箱
+    let history = [];
 
-    // モード切り替え
+    const colors = { haisui: '#808080', kyusui: '#0000ff', kyuto: '#ff0000' };
+
+    // 管種切り替え
+    document.querySelectorAll('.type-btn').forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentType = btn.dataset.type;
+            mode = 'route';
+            firstPoint = null;
+        };
+    });
+
     document.getElementById('scale-btn').onclick = () => {
-        mode = 'settingScale';
-        updateUI();
-        statusMsg.innerText = "図面上の「1m」の区間を2点クリックしてください";
+        mode = 'scale'; firstPoint = null;
+        statusMsg.innerText = "1mの区間を2点クリックしてください";
     };
 
-    document.getElementById('auto-btn').onclick = () => {
-        if(pixelsPerMeter === 0) { alert("先に1mの設定が必要です"); return; }
-        mode = 'autoPlacing';
-        updateUI();
-        statusMsg.innerText = "始点と終点をクリック（1m間隔で配置）";
-    };
-
-    // ↩ 戻るボタンの処理
     document.getElementById('undo-btn').onclick = () => {
         if (history.length === 0) return;
-        
-        // 最後に履歴に追加した「マーカーの配列」を取り出す
         const lastAction = history.pop();
-        lastAction.forEach(marker => {
-            container.removeChild(marker);
-        });
-        statusMsg.innerText = "一つ前の操作を取り消しました";
+        lastAction.forEach(el => container.removeChild(el));
     };
-
-    function updateUI() {
-        document.getElementById('scale-btn').classList.toggle('active', mode === 'settingScale');
-        document.getElementById('auto-btn').classList.toggle('active', mode === 'autoPlacing');
-        firstPoint = null;
-    }
 
     document.getElementById('upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (!file) return;
-        if (file.type === "application/pdf") {
+        if (file && file.type === "application/pdf") {
             const reader = new FileReader();
             reader.onload = async function() {
-                const typedarray = new Uint8Array(this.result);
-                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
                 const page = await pdf.getPage(1);
                 const viewport = page.getViewport({scale: 2.0});
                 canvas.height = viewport.height; canvas.width = viewport.width;
                 await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                statusMsg.innerText = "読込完了。①でスケールを設定してください";
             };
             reader.readAsArrayBuffer(file);
         }
@@ -108,41 +102,52 @@
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        if (mode === 'settingScale') {
+        if (mode === 'scale') {
             if (!firstPoint) { firstPoint = {x, y}; } 
             else {
                 pixelsPerMeter = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
-                statusMsg.innerText = "設定完了！ ②が使えます";
-                mode = 'idle'; updateUI();
+                statusMsg.innerText = "スケール完了！ルートを描けます";
+                mode = 'route'; firstPoint = null;
             }
-        } else if (mode === 'autoPlacing') {
+        } else if (mode === 'route') {
             if (!firstPoint) {
                 firstPoint = {x, y};
-                const m = createMarker(x, y);
-                history.push([m]); // 履歴に保存
             } else {
+                if (pixelsPerMeter === 0) { alert("先にスケールを設定してください"); return; }
                 const currentBatch = [];
+                
+                // 線（ルート）を描画
+                const line = document.createElement('div');
                 const dist = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
+                const angle = Math.atan2(y - firstPoint.y, x - firstPoint.x);
+                line.className = 'pipe-line';
+                line.style.width = dist + 'px';
+                line.style.backgroundColor = colors[currentType];
+                line.style.left = firstPoint.x + 'px';
+                line.style.top = firstPoint.y + 'px';
+                line.style.transform = `rotate(${angle}rad)`;
+                container.appendChild(line);
+                currentBatch.push(line);
+
+                // 1mピッチの金具を配置
                 const steps = Math.floor(dist / pixelsPerMeter);
-                for (let i = 1; i <= steps; i++) {
-                    const ratio = i / steps;
-                    const m = createMarker(firstPoint.x + (x - firstPoint.x) * ratio, firstPoint.y + (y - firstPoint.y) * ratio);
+                for (let i = 0; i <= steps; i++) {
+                    const ratio = i / (steps || 1);
+                    const mx = firstPoint.x + (x - firstPoint.x) * ratio;
+                    const my = firstPoint.y + (y - firstPoint.y) * ratio;
+                    const m = document.createElement('div');
+                    m.className = 'marker';
+                    m.style.backgroundColor = colors[currentType];
+                    m.style.left = mx + 'px';
+                    m.style.top = my + 'px';
+                    container.appendChild(m);
                     currentBatch.push(m);
                 }
-                history.push(currentBatch); // まとめて履歴に保存
+                history.push(currentBatch);
                 firstPoint = null;
             }
         }
     });
-
-    function createMarker(x, y) {
-        const marker = document.createElement('div');
-        marker.className = 'marker';
-        marker.style.left = x + 'px';
-        marker.style.top = y + 'px';
-        container.appendChild(marker);
-        return marker;
-    }
 </script>
 
 </body>
