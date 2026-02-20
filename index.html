@@ -3,56 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>水道屋アプリ v1.0</title>
+    <title>水道屋アプリ v1.1 (PDF対応)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
         #header { background: #333; color: white; padding: 10px; text-align: center; }
-        #canvas-container { flex: 1; position: relative; overflow: auto; background: #eee; border: 2px dashed #ccc; }
-        #blueprint { display: block; max-width: 100%; cursor: crosshair; }
-        .marker { position: absolute; width: 12px; height: 12px; background: red; border-radius: 50%; transform: translate(-50%, -50%); }
-        #controls { padding: 15px; background: #f9f9f9; border-top: 1px solid #ddd; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        #controls { padding: 15px; background: #f9f9f9; border-top: 1px solid #ddd; z-index: 10; }
+        #canvas-container { flex: 1; position: relative; overflow: auto; background: #eee; }
+        canvas { display: block; cursor: crosshair; }
+        .marker { position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.7); border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        button { padding: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div id="header">水道屋アプリ：図面プロット試作</div>
+<div id="header">水道屋アプリ：図面プロット (PDF対応版)</div>
 
 <div id="controls">
-    <input type="file" id="upload" accept="image/*">
-    <p>図面を選択して、スリーブや金具を置きたい場所をクリックしてください。</p>
-    <div id="stats">合計金具数: <span id="count">0</span> 個</div>
+    <input type="file" id="upload" accept="image/*,.pdf">
+    <span> 合計金具数: <b id="count">0</b> 個</span>
+    <button onclick="location.reload()">リセット</button>
 </div>
 
-<div id="canvas-container" id="container">
-    <img id="blueprint" src="" style="display:none;">
+<div id="canvas-container">
+    <canvas id="pdf-canvas"></canvas>
 </div>
 
 <script>
+    const url = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = url;
+
     const upload = document.getElementById('upload');
-    const blueprint = document.getElementById('blueprint');
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
     const container = document.getElementById('canvas-container');
     const countSpan = document.getElementById('count');
     let markerCount = 0;
 
-    // 画像読み込み
-    upload.addEventListener('change', (e) => {
+    upload.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (f) => {
-            blueprint.src = f.target.result;
-            blueprint.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
+        if (!file) return;
+
+        if (file.type === "application/pdf") {
+            const reader = new FileReader();
+            reader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({scale: 1.5});
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                await page.render({canvasContext: ctx, viewport: viewport}).promise;
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            // 画像の場合
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = URL.createObjectURL(file);
+        }
     });
 
-    // クリックでマーカー配置
-    container.addEventListener('click', (e) => {
-        if (!blueprint.src) return;
-        
-        const rect = container.getBoundingClientRect();
-        const x = e.clientX - rect.left + container.scrollLeft;
-        const y = e.clientY - rect.top + container.scrollTop;
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
 
         const marker = document.createElement('div');
         marker.className = 'marker';
