@@ -3,93 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v2.2 (サイズ完全対応)</title>
+    <title>水道屋アプリ v2.5 (誤動作防止版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #222; height: 100vh; }
-        #top-tabs { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 100; background: rgba(0,0,0,0.8); }
-        .tab { flex: 1; padding: 12px; text-align: center; color: #fff; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; }
-        .tab.active { border-bottom: 3px solid #007bff; background: #333; }
         
-        /* ミニメニューの改良 */
+        /* ページ切り替え */
+        #top-tabs { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 100; background: rgba(0,0,0,0.9); overflow-x: auto; }
+        .tab { padding: 12px 20px; color: #fff; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; min-width: 60px; }
+        .tab.active { border-bottom: 3px solid #007bff; background: #333; }
+
+        /* 🚀 常に右下に出る「道具箱」ボタン */
+        #floating-toggle {
+            position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px;
+            background: #ff9800; color: white; border-radius: 50%; border: 4px solid white;
+            font-size: 24px; font-weight: bold; z-index: 2000; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* メニュー（中央寄りに出るように変更） */
         #mini-menu { 
-            position: absolute; display: none; background: rgba(255,255,255,0.98); 
-            border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); 
-            padding: 12px; z-index: 1000; width: 240px;
+            position: fixed; display: none; background: rgba(255,255,255,0.98); 
+            border-radius: 12px; box-shadow: 0 4px 30px rgba(0,0,0,0.7); 
+            padding: 15px; z-index: 1500; width: 260px;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
         }
         
         #canvas-area { width: 100vw; height: 100vh; overflow: auto; background: #333; padding-top: 45px; }
         .page-container { position: relative; display: none; }
         .page-container.active { display: block; }
-        canvas { display: block; }
+        canvas { display: block; background: white; cursor: crosshair; }
 
-        /* 描画パーツ */
         .marker { position: absolute; width: 10px; height: 10px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
         .riser { position: absolute; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
 
-        /* ボタンデザイン */
-        .cmd-btn { padding: 10px 5px; margin: 2px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; flex: 1; min-width: 50px; }
+        .cmd-btn { padding: 12px 5px; margin: 2px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; flex: 1; }
         .btn-blue { background: #007bff; color: white; }
         .btn-green { background: #28a745; color: white; }
         .btn-gray { background: #6c757d; color: white; }
-        .active-sel { outline: 3px solid #ff9800; box-shadow: 0 0 8px rgba(255,152,0,0.8); }
-        .row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-        label { font-size: 11px; font-weight: bold; color: #333; display: block; margin-bottom: 4px; border-left: 3px solid #007bff; padding-left: 5px; }
+        .active-sel { outline: 3px solid #ff9800; box-shadow: 0 0 10px rgba(255,152,0,0.8); }
+        .row { display: flex; gap: 4px; margin-bottom: 12px; }
+        label { font-size: 12px; font-weight: bold; color: #333; display: block; margin-bottom: 5px; border-left: 4px solid #007bff; padding-left: 8px; }
     </style>
 </head>
 <body>
 
 <div id="top-tabs">
-    <div class="tab active" onclick="switchTab('1F')">1F</div>
-    <div class="tab" onclick="switchTab('2F')">2F</div>
-    <div class="tab" style="background:#444;" onclick="document.getElementById('file-input').click()">📁 読込</div>
+    <div class="tab" style="background:#444;" onclick="document.getElementById('file-input').click()">📁 PDF読込</div>
 </div>
 <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
 
+<button id="floating-toggle" onclick="toggleMenu()">🛠</button>
+
 <div id="mini-menu">
-    <label>排水 (灰色)</label>
+    <label>配管選択</label>
     <div class="row">
         <button id="btn-haisui-75" class="cmd-btn" onclick="setType('haisui', '75')" style="background:#808080; color:white;">排75</button>
         <button id="btn-haisui-50" class="cmd-btn" onclick="setType('haisui', '50')" style="background:#808080; color:white;">排50</button>
     </div>
-    <label>給水 (青) / 給湯 (赤)</label>
     <div class="row">
         <button id="btn-kyusui-16" class="cmd-btn" onclick="setType('kyusui', '16')" style="background:#0000ff; color:white;">給16</button>
         <button id="btn-kyusui-13" class="cmd-btn" onclick="setType('kyusui', '13')" style="background:#0000ff; color:white;">給13</button>
+    </div>
+    <div class="row">
         <button id="btn-kyuto-16" class="cmd-btn" onclick="setType('kyuto', '16')" style="background:#ff0000; color:white;">湯16</button>
         <button id="btn-kyuto-13" class="cmd-btn" onclick="setType('kyuto', '13')" style="background:#ff0000; color:white;">湯13</button>
     </div>
     <label>ツール</label>
     <div class="row">
-        <button id="m-route" class="cmd-btn btn-blue active-sel" onclick="setMode('route')">🖊描画</button>
+        <button id="m-route" class="cmd-btn btn-blue" onclick="setMode('route')">🖊ルート</button>
         <button id="m-riser" class="cmd-btn btn-blue" onclick="setMode('riser')">◎立上</button>
-        <button id="m-scale" class="cmd-btn btn-gray" onclick="setMode('scale')">📏尺設定</button>
+        <button id="m-scale" class="cmd-btn btn-gray" onclick="setMode('scale')">📏尺</button>
     </div>
     <div class="row">
         <button class="cmd-btn btn-gray" onclick="undo()">↩戻る</button>
-        <button class="cmd-btn btn-green" onclick="saveImage()">📸画像保存</button>
+        <button class="cmd-btn btn-green" onclick="saveImage()">📸保存</button>
     </div>
+    <button onclick="toggleMenu()" style="width:100%; padding:10px; background:#eee; border:none; border-radius:6px;">❌ 閉じる</button>
 </div>
 
-<div id="canvas-area">
-    <div id="container-1F" class="page-container active"></div>
-    <div id="container-2F" class="page-container"></div>
-</div>
+<div id="canvas-area"></div>
 
 <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    let currentFloor = '1F';
-    let pixelsPerMeter = { '1F': 0, '2F': 0 };
+    let currentPageId = null;
+    let pageData = {};
     let currentType = 'haisui';
     let currentSize = '75';
     let currentMode = 'route';
     let firstPoint = null;
-    let history = { '1F': [], '2F': [] };
-    let lastClickTime = 0;
 
     const config = {
         haisui: { color: '#808080', sizes: { '75': 10, '50': 6 } },
@@ -97,90 +102,115 @@
         kyuto:  { color: '#ff0000', sizes: { '16': 6, '13': 4 } }
     };
 
+    function toggleMenu() {
+        const menu = document.getElementById('mini-menu');
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        updateActiveBtn();
+        firstPoint = null; // メニューを開いた瞬間に、中途半端な線の引き始めをリセット
+    }
+
     function updateActiveBtn() {
         document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active-sel'));
         const typeBtn = document.getElementById(`btn-${currentType}-${currentSize}`);
         if(typeBtn) typeBtn.classList.add('active-sel');
-        document.getElementById('m-' + currentMode).classList.add('active-sel');
+        const modeBtn = document.getElementById('m-' + currentMode);
+        if(modeBtn) modeBtn.classList.add('active-sel');
     }
-
-    // ダブルタップでメニュー
-    document.getElementById('canvas-area').addEventListener('click', (e) => {
-        const currentTime = new Date().getTime();
-        const gap = currentTime - lastClickTime;
-        if (gap < 300 && gap > 0) {
-            const menu = document.getElementById('mini-menu');
-            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-            menu.style.left = Math.min(e.pageX, window.innerWidth - 250) + 'px';
-            menu.style.top = Math.min(e.pageY, window.innerHeight - 250) + 'px';
-            updateActiveBtn();
-            firstPoint = null;
-        }
-        lastClickTime = currentTime;
-    });
 
     function setType(type, size) {
         currentType = type; currentSize = size;
-        updateActiveBtn();
-        setTimeout(() => document.getElementById('mini-menu').style.display = 'none', 150);
+        toggleMenu();
     }
 
     function setMode(mode) {
         currentMode = mode;
-        updateActiveBtn();
-        setTimeout(() => document.getElementById('mini-menu').style.display = 'none', 150);
-        firstPoint = null;
+        toggleMenu();
     }
 
-    function switchTab(floor) {
-        currentFloor = floor;
-        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.innerText === floor));
-        document.getElementById('container-1F').classList.toggle('active', floor === '1F');
-        document.getElementById('container-2F').classList.toggle('active', floor === '2F');
+    function switchPage(id) {
+        currentPageId = id;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + id).classList.add('active');
+        document.querySelectorAll('.page-container').forEach(c => c.classList.remove('active'));
+        document.getElementById('container-' + id).classList.add('active');
+        firstPoint = null;
     }
 
     document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        const container = document.getElementById('container-' + currentFloor);
-        container.innerHTML = '';
-        const canvas = document.createElement('canvas');
-        container.appendChild(canvas);
+        const topTabs = document.getElementById('top-tabs');
+        const canvasArea = document.getElementById('canvas-area');
+        while (topTabs.children.length > 1) topTabs.removeChild(topTabs.lastChild);
+        canvasArea.innerHTML = '';
+        pageData = {};
 
         const reader = new FileReader();
         reader.onload = async function() {
-            if (file.type === "application/pdf") {
-                const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-                let pageNum = (currentFloor === '1F') ? 1 : 2;
-                if (pdf.numPages < pageNum) pageNum = 1;
-                const page = await pdf.getPage(pageNum);
-                const vp = page.getViewport({scale: 2.0});
-                canvas.width = vp.width; canvas.height = vp.height;
-                await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
-            } else {
-                const img = new Image();
-                img.onload = () => { canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); };
-                img.src = URL.createObjectURL(file);
-            }
+            try {
+                if (file.type === "application/pdf") {
+                    const pdf = await pdfjsLib.getDocument({data: new Uint8Array(this.result)}).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const id = 'NO' + i;
+                        createPageUI(id, topTabs, canvasArea);
+                        const page = await pdf.getPage(i);
+                        const vp = page.getViewport({scale: 2.0});
+                        const canvas = document.getElementById('canvas-' + id);
+                        canvas.width = vp.width; canvas.height = vp.height;
+                        await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+                    }
+                } else {
+                    const id = 'NO1';
+                    createPageUI(id, topTabs, canvasArea);
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.getElementById('canvas-' + id);
+                        canvas.width = img.width; canvas.height = img.height;
+                        canvas.getContext('2d').drawImage(img, 0, 0);
+                    };
+                    img.src = URL.createObjectURL(file);
+                }
+                switchPage('NO1');
+            } catch (err) { alert("読込失敗: " + err.message); }
         };
         reader.readAsArrayBuffer(file);
-        canvas.addEventListener('click', (ev) => {
-            setTimeout(() => { if (new Date().getTime() - lastClickTime > 300) handleDraw(ev.offsetX, ev.offsetY, container); }, 310);
-        });
+        e.target.value = ''; 
     };
 
+    function createPageUI(id, topTabs, canvasArea) {
+        const tab = document.createElement('div');
+        tab.id = 'tab-' + id; tab.className = 'tab'; tab.innerText = id;
+        tab.onclick = () => switchPage(id);
+        topTabs.appendChild(tab);
+
+        const container = document.createElement('div');
+        container.id = 'container-' + id; container.className = 'page-container';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'canvas-' + id;
+        canvas.onclick = (ev) => handleDraw(ev.offsetX, ev.offsetY, container);
+        
+        container.appendChild(canvas);
+        canvasArea.appendChild(container);
+        pageData[id] = { pixelsPerMeter: 0, history: [] };
+    }
+
     function handleDraw(x, y, container) {
+        // メニューが開いている間は描画させない
+        if (document.getElementById('mini-menu').style.display === 'block') return;
+
+        const data = pageData[currentPageId];
         if (currentMode === 'scale') {
             if (!firstPoint) firstPoint = {x, y};
-            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); alert("スケール設定完了！ダブルタップでメニューから配管を選んでください"); setMode('route'); }
+            else { data.pixelsPerMeter = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); alert("スケール完了！配管を選んで描いてください。"); firstPoint = null; }
         } else if (currentMode === 'riser') {
             const r = document.createElement('div');
             r.className = 'riser';
             r.style.left = x+'px'; r.style.top = y+'px'; r.style.borderColor = config[currentType].color;
             container.appendChild(r);
-            history[currentFloor].push([r]);
+            data.history.push([r]);
         } else if (currentMode === 'route') {
-            if (!pixelsPerMeter[currentFloor]) return alert("先にスケール設定(📏尺)をしてください。ダブルタップでメニューが開きます。");
+            if (!data.pixelsPerMeter) return alert("先に右下の🛠から📏（尺）を設定してください。");
             if (!firstPoint) firstPoint = {x, y};
             else {
                 const batch = [];
@@ -194,7 +224,7 @@
                 line.style.transform = `rotate(${angle}rad) translateY(-50%)`;
                 container.appendChild(line);
                 batch.push(line);
-                const steps = Math.max(1, Math.floor(dist / pixelsPerMeter[currentFloor]));
+                const steps = Math.max(1, Math.floor(dist / data.pixelsPerMeter));
                 for(let i=0; i<=steps; i++) {
                     const m = document.createElement('div');
                     m.className = 'marker'; m.style.backgroundColor = config[currentType].color;
@@ -203,20 +233,23 @@
                     container.appendChild(m);
                     batch.push(m);
                 }
-                history[currentFloor].push(batch);
+                data.history.push(batch);
                 firstPoint = null;
             }
         }
     }
 
-    function undo() { const h = history[currentFloor]; if (h.length > 0) h.pop().forEach(el => el.remove()); }
+    function undo() { 
+        const h = pageData[currentPageId].history; 
+        if (h.length > 0) h.pop().forEach(el => el.remove()); 
+    }
 
     async function saveImage() {
         document.getElementById('mini-menu').style.display = 'none';
-        const target = document.getElementById('container-' + currentFloor);
+        const target = document.getElementById('container-' + currentPageId);
         const canvas = await html2canvas(target);
         const link = document.createElement('a');
-        link.download = `水道_${currentFloor}.png`;
+        link.download = `水道_${currentPageId}.png`;
         link.href = canvas.toDataURL();
         link.click();
     }
