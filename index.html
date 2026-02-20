@@ -3,69 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>水道屋アプリ v1.6 (サイズ別太さ対応)</title>
+    <title>水道屋アプリ v1.7 (多機能版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #header { background: #333; color: white; padding: 10px; text-align: center; }
-        #controls { padding: 10px; background: #f4f4f4; border-bottom: 1px solid #ccc; z-index: 10; }
-        #canvas-container { flex: 1; position: relative; overflow: auto; background: #ddd; }
-        canvas { display: block; cursor: crosshair; }
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #333; }
+        #header { background: #222; color: white; padding: 10px; text-align: center; font-weight: bold; }
+        #tabs { display: flex; background: #444; }
+        .tab { flex: 1; padding: 10px; text-align: center; color: #ccc; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab.active { color: white; border-bottom: 3px solid #007bff; background: #555; }
+        #controls { padding: 10px; background: #f4f4f4; border-bottom: 1px solid #ccc; font-size: 13px; overflow-y: auto; }
+        #canvas-area { flex: 1; position: relative; overflow: auto; background: #ddd; }
+        .page-container { position: relative; display: none; }
+        .page-container.active { display: block; }
+        canvas { display: block; }
         .marker { position: absolute; width: 10px; height: 10px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.6; }
-        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; font-weight: bold; }
-        .btn-scale { background: #555; color: white; }
-        .btn-undo { background: #eee; color: #333; border: 1px solid #ccc; }
-        .group-label { font-size: 12px; color: #333; margin: 5px 2px 2px; font-weight: bold; }
-        .selector { display: flex; gap: 5px; margin-bottom: 5px; flex-wrap: wrap; }
-        .type-btn, .size-btn { flex: 1; min-width: 60px; border: 2px solid transparent; }
-        .active { border-color: #000 !important; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-        #status-msg { font-size: 12px; color: #666; }
+        .riser { position: absolute; width: 16px; height: 16px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; } /* 二重丸 */
+        .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
+        button { padding: 6px 10px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; font-weight: bold; }
+        .btn-main { background: #007bff; color: white; }
+        .btn-sub { background: #6c757d; color: white; }
+        .btn-save { background: #28a745; color: white; width: 100%; margin-top: 5px; padding: 10px; }
+        .selector { display: flex; gap: 4px; margin: 5px 0; flex-wrap: wrap; }
+        .type-btn, .size-btn { flex: 1; min-width: 50px; opacity: 0.6; }
+        .active-btn { opacity: 1 !important; outline: 2px solid #000; }
     </style>
 </head>
 <body>
 
-<div id="header">水道屋アプリ：管径別ルート描画</div>
+<div id="header">水道屋アプリ v1.7</div>
 
-<div id="controls">
-    <input type="file" id="upload" accept="image/*,.pdf">
-    <button id="scale-btn" class="btn-scale">📏 スケール設定</button>
-    <button id="undo-btn" class="btn-undo">↩ 戻る</button>
-
-    <div class="group-label">1. 管種を選択</div>
-    <div class="selector">
-        <button class="type-btn active" data-type="haisui" style="background:#808080; color:white;">排水</button>
-        <button class="type-btn" data-type="kyusui" style="background:#0000ff; color:white;">給水</button>
-        <button class="type-btn" data-type="kyuto" style="background:#ff0000; color:white;">給湯</button>
-    </div>
-
-    <div class="group-label">2. サイズ(呼び径)を選択</div>
-    <div id="size-selector" class="selector">
-        </div>
-    
-    <div id="status-msg">①スケール設定後、種別とサイズを選んでクリック</div>
+<div id="tabs">
+    <div class="tab active" onclick="switchTab('1F')">1F</div>
+    <div class="tab" onclick="switchTab('2F')">2F</div>
 </div>
 
-<div id="canvas-container">
-    <canvas id="pdf-canvas"></canvas>
+<div id="controls">
+    <input type="file" id="upload" accept=".pdf,image/*">
+    <button onclick="setMode('scale')" id="btn-scale" class="btn-sub">📏 スケール設定</button>
+    <button onclick="undo()" class="btn-sub">↩ 戻る</button>
+    
+    <div style="margin-top:8px;"><b>管種:</b></div>
+    <div class="selector">
+        <button class="type-btn active-btn" id="t-haisui" onclick="setType('haisui')" style="background:#808080; color:white;">排水</button>
+        <button class="type-btn" id="t-kyusui" onclick="setType('kyusui')" style="background:#0000ff; color:white;">給水</button>
+        <button class="type-btn" id="t-kyuto" onclick="setType('kyuto')" style="background:#ff0000; color:white;">給湯</button>
+    </div>
+
+    <div style="margin-top:8px;"><b>サイズ・モード:</b></div>
+    <div class="selector" id="size-selector"></div>
+    <div class="selector">
+        <button id="btn-route" onclick="setMode('route')" class="btn-main active-btn">🖊 ルート描画</button>
+        <button id="btn-riser" onclick="setMode('riser')" class="btn-main">◎ 立ち上がり</button>
+    </div>
+
+    <button onclick="saveImage()" class="btn-save">📸 画像として保存してLINE等へ</button>
+</div>
+
+<div id="canvas-area">
+    <div id="container-1F" class="page-container active"></div>
+    <div id="container-2F" class="page-container"></div>
 </div>
 
 <script>
-    const url = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = url;
-
-    const container = document.getElementById('canvas-container');
-    const canvas = document.getElementById('pdf-canvas');
-    const ctx = canvas.getContext('2d');
-    const statusMsg = document.getElementById('status-msg');
-    const sizeSelector = document.getElementById('size-selector');
-    
-    let pixelsPerMeter = 0;
+    let currentFloor = '1F';
+    let pixelsPerMeter = { '1F': 0, '2F': 0 };
     let currentType = 'haisui';
     let currentSize = '75';
-    let mode = 'route';
+    let currentMode = 'route'; // route, riser, scale
     let firstPoint = null;
-    let history = [];
+    let history = { '1F': [], '2F': [] };
 
     const config = {
         haisui: { color: '#808080', sizes: { '75': 10, '50': 5 } },
@@ -73,106 +80,124 @@
         kyuto:  { color: '#ff0000', sizes: { '16': 6, '13': 3 } }
     };
 
-    // サイズボタンの生成
-    function updateSizeButtons() {
-        sizeSelector.innerHTML = '';
-        const availableSizes = config[currentType].sizes;
-        Object.keys(availableSizes).forEach((size, index) => {
-            const btn = document.createElement('button');
-            btn.className = 'size-btn' + (index === 0 ? ' active' : '');
-            btn.innerText = size;
-            btn.style.backgroundColor = config[currentType].color;
-            btn.style.color = 'white';
-            if (index === 0) currentSize = size;
-            btn.onclick = () => {
-                document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentSize = size;
-                firstPoint = null;
-            };
-            sizeSelector.appendChild(btn);
+    function switchTab(floor) {
+        currentFloor = floor;
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.innerText === floor));
+        document.querySelectorAll('.page-container').forEach(c => c.classList.toggle('active', c.id === 'container-' + floor));
+        firstPoint = null;
+    }
+
+    function setType(type) {
+        currentType = type;
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active-btn', b.id === 't-'+type));
+        renderSizeButtons();
+    }
+
+    function renderSizeButtons() {
+        const sel = document.getElementById('size-selector');
+        sel.innerHTML = '';
+        Object.keys(config[currentType].sizes).forEach(size => {
+            const b = document.createElement('button');
+            b.className = 'size-btn' + (currentSize === size ? ' active-btn' : '');
+            b.innerText = size;
+            b.style.backgroundColor = config[currentType].color;
+            b.style.color = "white";
+            b.onclick = () => { currentSize = size; renderSizeButtons(); };
+            sel.appendChild(b);
         });
     }
-    updateSizeButtons();
+    renderSizeButtons();
 
-    // 管種切り替え
-    document.querySelectorAll('.type-btn').forEach(btn => {
-        btn.onclick = () => {
-            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentType = btn.dataset.type;
-            updateSizeButtons();
-            mode = 'route';
-            firstPoint = null;
-        };
-    });
+    function setMode(mode) {
+        currentMode = mode;
+        document.getElementById('btn-route').classList.toggle('active-btn', mode === 'route');
+        document.getElementById('btn-riser').classList.toggle('active-btn', mode === 'riser');
+        document.getElementById('btn-scale').classList.toggle('active-btn', mode === 'scale');
+        firstPoint = null;
+    }
 
-    document.getElementById('scale-btn').onclick = () => { mode = 'scale'; firstPoint = null; statusMsg.innerText = "1mの区間を2点クリックしてください"; };
-    document.getElementById('undo-btn').onclick = () => { if (history.length === 0) return; const lastAction = history.pop(); lastAction.forEach(el => container.removeChild(el)); };
-
-    document.getElementById('upload').addEventListener('change', async (e) => {
+    document.getElementById('upload').onchange = async (e) => {
         const file = e.target.files[0];
-        if (file && file.type === "application/pdf") {
-            const reader = new FileReader();
-            reader.onload = async function() {
-                const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-                const page = await pdf.getPage(1);
-                const viewport = page.getViewport({scale: 2.0});
-                canvas.height = viewport.height; canvas.width = viewport.width;
-                await page.render({canvasContext: ctx, viewport: viewport}).promise;
-            };
-            reader.readAsArrayBuffer(file);
+        if (!file) return;
+        const container = document.getElementById('container-' + currentFloor);
+        container.innerHTML = ''; 
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (file.type === "application/pdf") {
+            const pdf = await pdfjsLib.getDocument(new Uint8Array(await file.arrayBuffer())).promise;
+            const page = await pdf.getPage(1);
+            const vp = page.getViewport({scale: 2.0});
+            canvas.width = vp.width; canvas.height = vp.height;
+            await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+        } else {
+            const img = new Image();
+            img.onload = () => { canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); };
+            img.src = URL.createObjectURL(file);
         }
-    });
 
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        canvas.onclick = (ev) => {
+            const x = ev.offsetX; const y = ev.offsetY;
+            handleCanvasClick(x, y, container);
+        };
+    };
 
-        if (mode === 'scale') {
-            if (!firstPoint) { firstPoint = {x, y}; } 
+    function handleCanvasClick(x, y, container) {
+        if (currentMode === 'scale') {
+            if (!firstPoint) firstPoint = {x, y};
+            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); alert("スケール設定完了"); }
+        } else if (currentMode === 'riser') {
+            const r = document.createElement('div');
+            r.className = 'riser';
+            r.style.left = x+'px'; r.style.top = y+'px';
+            r.style.borderColor = config[currentType].color;
+            container.appendChild(r);
+            history[currentFloor].push([r]);
+        } else if (currentMode === 'route') {
+            if (!firstPoint) firstPoint = {x, y};
             else {
-                pixelsPerMeter = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
-                statusMsg.innerText = "スケール完了！ルートを描けます";
-                mode = 'route'; firstPoint = null;
-            }
-        } else if (mode === 'route') {
-            if (!firstPoint) { firstPoint = {x, y}; } 
-            else {
-                if (pixelsPerMeter === 0) { alert("先にスケールを設定してください"); return; }
-                const currentBatch = [];
-                const dist = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
-                const angle = Math.atan2(y - firstPoint.y, x - firstPoint.x);
-                const thickness = config[currentType].sizes[currentSize];
-
+                if (!pixelsPerMeter[currentFloor]) return alert("先にスケール設定をしてください");
+                const batch = [];
+                const dist = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2);
+                const angle = Math.atan2(y-firstPoint.y, x-firstPoint.x);
                 const line = document.createElement('div');
                 line.className = 'pipe-line';
-                line.style.width = dist + 'px';
-                line.style.height = thickness + 'px'; // サイズに応じた太さ
+                line.style.width = dist+'px'; line.style.height = config[currentType].sizes[currentSize]+'px';
                 line.style.backgroundColor = config[currentType].color;
-                line.style.left = firstPoint.x + 'px';
-                line.style.top = firstPoint.y + 'px';
+                line.style.left = firstPoint.x+'px'; line.style.top = firstPoint.y+'px';
                 line.style.transform = `rotate(${angle}rad) translateY(-50%)`;
                 container.appendChild(line);
-                currentBatch.push(line);
+                batch.push(line);
 
-                const steps = Math.floor(dist / pixelsPerMeter);
-                for (let i = 0; i <= steps; i++) {
-                    const ratio = i / (steps || 1);
+                const steps = Math.floor(dist / pixelsPerMeter[currentFloor]);
+                for(let i=0; i<=steps; i++) {
                     const m = document.createElement('div');
                     m.className = 'marker';
+                    m.style.left = (firstPoint.x + (x-firstPoint.x)*(i/steps))+'px';
+                    m.style.top = (firstPoint.y + (y-firstPoint.y)*(i/steps))+'px';
                     m.style.backgroundColor = config[currentType].color;
-                    m.style.left = (firstPoint.x + (x - firstPoint.x) * ratio) + 'px';
-                    m.style.top = (firstPoint.y + (y - firstPoint.y) * ratio) + 'px';
                     container.appendChild(m);
-                    currentBatch.push(m);
+                    batch.push(m);
                 }
-                history.push(currentBatch);
+                history[currentFloor].push(batch);
                 firstPoint = null;
             }
         }
-    });
+    }
+
+    function undo() {
+        const h = history[currentFloor];
+        if (h.length > 0) h.pop().forEach(el => el.remove());
+    }
+
+    async function saveImage() {
+        const target = document.getElementById('container-' + currentFloor);
+        const canvas = await html2canvas(target);
+        const link = document.createElement('a');
+        link.download = `水道図面_${currentFloor}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    }
 </script>
 
 </body>
