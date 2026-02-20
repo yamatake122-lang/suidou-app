@@ -3,35 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v2.0 (ミニコマンド版)</title>
+    <title>水道屋アプリ v2.1 (ダブルタップメニュー)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #222; height: 100vh; }
-        
-        /* 階数切り替えだけは上部に固定 */
         #top-tabs { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 100; background: rgba(0,0,0,0.8); }
         .tab { flex: 1; padding: 12px; text-align: center; color: #fff; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; }
         .tab.active { border-bottom: 3px solid #007bff; background: #333; }
-
-        /* フローティングメニュー（隠しメニュー） */
         #mini-menu { 
             position: absolute; display: none; background: rgba(255,255,255,0.95); 
             border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
             padding: 10px; z-index: 1000; width: 220px;
         }
-        
-        #canvas-area { width: 100vw; height: 100vh; overflow: auto; background: #333; }
+        #canvas-area { width: 100vw; height: 100vh; overflow: auto; background: #333; padding-top: 45px; }
         .page-container { position: relative; display: none; }
         .page-container.active { display: block; }
         canvas { display: block; }
-
-        /* 描画パーツ */
         .marker { position: absolute; width: 10px; height: 10px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
         .riser { position: absolute; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
-
-        /* ボタンデザイン */
         .cmd-btn { padding: 8px; margin: 2px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
         .btn-blue { background: #007bff; color: white; }
         .btn-green { background: #28a745; color: white; }
@@ -68,9 +59,10 @@
         <button class="cmd-btn btn-gray" style="flex:1" onclick="undo()">↩戻る</button>
         <button class="cmd-btn btn-green" style="flex:1" onclick="saveImage()">📸保存</button>
     </div>
+    <div style="font-size:9px; color:#999; text-align:center;">ダブルタップでメニューを閉じる</div>
 </div>
 
-<div id="canvas-area" onclick="handleBackgroundClick(event)">
+<div id="canvas-area">
     <div id="container-1F" class="page-container active"></div>
     <div id="container-2F" class="page-container"></div>
 </div>
@@ -86,33 +78,29 @@
     let currentMode = 'route';
     let firstPoint = null;
     let history = { '1F': [], '2F': [] };
+    let lastClickTime = 0;
 
-    const config = {
-        haisui: { color: '#808080', sizes: { '75': 10, '50': 5 } },
-        kyusui: { color: '#0000ff', sizes: { '16': 6, '13': 3 } },
-        kyuto:  { color: '#ff0000', sizes: { '16': 6, '13': 3 } }
-    };
-
-    // 背景クリックでメニューを出す/消す
-    function handleBackgroundClick(e) {
-        if (e.target.tagName === 'CANVAS') {
+    // ダブルクリック/ダブルタップでメニュー表示
+    document.getElementById('canvas-area').addEventListener('click', (e) => {
+        const currentTime = new Date().getTime();
+        const gap = currentTime - lastClickTime;
+        
+        if (gap < 300 && gap > 0) {
+            // ダブルタップ成立：メニューを表示
             const menu = document.getElementById('mini-menu');
-            if (menu.style.display === 'block') {
-                menu.style.display = 'none';
-            } else {
-                menu.style.display = 'block';
-                menu.style.left = Math.min(e.pageX, window.innerWidth - 230) + 'px';
-                menu.style.top = Math.min(e.pageY, window.innerHeight - 150) + 'px';
-            }
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+            menu.style.left = Math.min(e.pageX, window.innerWidth - 230) + 'px';
+            menu.style.top = Math.min(e.pageY, window.innerHeight - 150) + 'px';
+            firstPoint = null; // ダブルタップ時は描画をキャンセル
         }
-    }
+        lastClickTime = currentTime;
+    });
 
     function switchTab(floor) {
         currentFloor = floor;
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.innerText === floor));
         document.getElementById('container-1F').classList.toggle('active', floor === '1F');
         document.getElementById('container-2F').classList.toggle('active', floor === '2F');
-        document.getElementById('mini-menu').style.display = 'none';
     }
 
     function setType(type, size) {
@@ -125,6 +113,7 @@
         document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active-mode'));
         document.getElementById('m-' + mode).classList.add('active-mode');
         document.getElementById('mini-menu').style.display = 'none';
+        firstPoint = null;
     }
 
     document.getElementById('file-input').onchange = async (e) => {
@@ -152,17 +141,26 @@
             }
         };
         reader.readAsArrayBuffer(file);
-        // キャンバスクリック時の描画処理
         canvas.addEventListener('click', (ev) => {
-            ev.stopPropagation(); // 背景クリックイベント（メニュー表示）を防ぐ
-            handleDraw(ev.offsetX, ev.offsetY, container);
+            // 300ミリ秒待って、ダブルタップじゃなければ描画
+            setTimeout(() => {
+                if (new Date().getTime() - lastClickTime > 300) {
+                    handleDraw(ev.offsetX, ev.offsetY, container);
+                }
+            }, 310);
         });
     };
 
     function handleDraw(x, y, container) {
         if (currentMode === 'scale') {
-            if (!firstPoint) firstPoint = {x, y};
-            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); }
+            if (!firstPoint) {
+                firstPoint = {x, y};
+            } else {
+                pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2);
+                alert("スケール設定完了。メニューからルートを選んでください");
+                currentMode = 'idle'; // 一旦待機
+                firstPoint = null;
+            }
         } else if (currentMode === 'riser') {
             const r = document.createElement('div');
             r.className = 'riser';
@@ -170,9 +168,14 @@
             container.appendChild(r);
             history[currentFloor].push([r]);
         } else if (currentMode === 'route') {
-            if (!firstPoint) { firstPoint = {x, y}; } 
-            else {
-                if (!pixelsPerMeter[currentFloor]) return alert("先にスケール設定を！");
+            if (!pixelsPerMeter[currentFloor]) {
+                // スケールがない時はアラートを出してメニューを表示させる
+                alert("先にスケール（📏尺）を設定してください。ダブルタップでメニューが開きます。");
+                return;
+            }
+            if (!firstPoint) {
+                firstPoint = {x, y};
+            } else {
                 const batch = [];
                 const dist = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2);
                 const angle = Math.atan2(y-firstPoint.y, x-firstPoint.x);
@@ -199,7 +202,7 @@
         }
     }
 
-    function undo() { const h = history[currentFloor]; if (h.length > 0) h.pop().forEach(el => el.remove()); document.getElementById('mini-menu').style.display = 'none'; }
+    function undo() { const h = history[currentFloor]; if (h.length > 0) h.pop().forEach(el => el.remove()); }
 
     async function saveImage() {
         document.getElementById('mini-menu').style.display = 'none';
