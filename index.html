@@ -3,38 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v1.8 (スッキリ表示)</title>
+    <title>水道屋アプリ v1.9 (階別ファイル対応)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #222; height: 100vh; display: flex; flex-direction: column; }
-        
-        /* ヘッダーとメニューボタン */
         #top-bar { background: #000; color: white; padding: 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
         #menu-toggle { background: #007bff; border: none; color: white; padding: 5px 15px; border-radius: 4px; font-weight: bold; }
-
-        /* 折りたたみメニュー */
         #controls { 
             position: absolute; top: 45px; right: 0; left: 0;
             background: rgba(244, 244, 244, 0.95); padding: 15px; 
             border-bottom: 2px solid #ccc; z-index: 90;
-            display: none; /* 最初は隠す */
-            max-height: 80vh; overflow-y: auto;
+            display: none; max-height: 80vh; overflow-y: auto;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         #controls.open { display: block; }
-
-        /* 図面表示エリア */
         #canvas-area { flex: 1; position: relative; overflow: auto; background: #333; }
-        .page-container { position: relative; }
+        .page-container { position: relative; display: none; min-width: 100%; min-height: 100%; }
+        .page-container.active { display: block; }
         canvas { display: block; }
-
-        /* 描画パーツ */
         .marker { position: absolute; width: 10px; height: 10px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
         .riser { position: absolute; width: 16px; height: 16px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
-
-        /* ボタン類 */
         .btn-group { margin-bottom: 10px; }
         .label { font-size: 12px; font-weight: bold; margin-bottom: 5px; display: block; }
         button { padding: 8px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; font-weight: bold; }
@@ -54,40 +44,38 @@
 </div>
 
 <div id="controls">
-    <span class="label">図面読込:</span>
-    <input type="file" id="upload" accept=".pdf,image/*" style="width:100%;">
+    <span class="label">現在の階に図面を読み込む:</span>
+    <input type="file" id="upload-input" accept=".pdf,image/*" style="width:100%;">
     <hr>
     <div class="btn-group">
-        <button onclick="setMode('scale')" id="btn-scale" style="background:#555; color:white;">📏 スケール設定(1m)</button>
+        <button onclick="setMode('scale')" id="btn-scale" style="background:#555; color:white;">📏 スケール設定</button>
         <button onclick="undo()" style="background:#eee; border:1px solid #ccc;">↩ 戻る</button>
     </div>
-
     <span class="label">管種:</span>
     <div class="btn-group">
         <button class="type-btn active-btn" id="t-haisui" onclick="setType('haisui')" style="background:#808080; color:white;">排水</button>
         <button class="type-btn" id="t-kyusui" onclick="setType('kyusui')" style="background:#0000ff; color:white;">給水</button>
         <button class="type-btn" id="t-kyuto" onclick="setType('kyuto')" style="background:#ff0000; color:white;">給湯</button>
     </div>
-
     <span class="label">サイズ:</span>
     <div id="size-selector" class="btn-group"></div>
-
     <span class="label">モード:</span>
     <div class="btn-group">
         <button id="btn-route" onclick="setMode('route')" style="background:#007bff; color:white;" class="active-btn">🖊 ルート</button>
         <button id="btn-riser" onclick="setMode('riser')" style="background:#007bff; color:white;">◎ 立ち上がり</button>
     </div>
-
     <button onclick="saveImage()" style="background:#28a745; color:white; width:100%; padding:12px; margin-top:10px;">📸 画像を保存 (LINE用)</button>
-    <p id="status-msg" style="font-size:11px; color:#666;"></p>
 </div>
 
 <div id="canvas-area">
-    <div id="container-1F" class="page-container" style="display:block;"></div>
-    <div id="container-2F" class="page-container" style="display:none;"></div>
+    <div id="container-1F" class="page-container active"></div>
+    <div id="container-2F" class="page-container"></div>
 </div>
 
 <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
     let currentFloor = '1F';
     let pixelsPerMeter = { '1F': 0, '2F': 0 };
     let currentType = 'haisui';
@@ -102,16 +90,14 @@
         kyuto:  { color: '#ff0000', sizes: { '16': 6, '13': 3 } }
     };
 
-    function toggleMenu() {
-        document.getElementById('controls').classList.toggle('open');
-    }
+    function toggleMenu() { document.getElementById('controls').classList.toggle('open'); }
 
     function switchTab(floor) {
         currentFloor = floor;
         document.getElementById('tab-1F').classList.toggle('active', floor === '1F');
         document.getElementById('tab-2F').classList.toggle('active', floor === '2F');
-        document.getElementById('container-1F').style.display = (floor === '1F' ? 'block' : 'none');
-        document.getElementById('container-2F').style.display = (floor === '2F' ? 'block' : 'none');
+        document.getElementById('container-1F').classList.toggle('active', floor === '1F');
+        document.getElementById('container-2F').classList.toggle('active', floor === '2F');
         firstPoint = null;
     }
 
@@ -141,14 +127,14 @@
         document.getElementById('btn-riser').classList.toggle('active-btn', mode === 'riser');
         document.getElementById('btn-scale').classList.toggle('active-btn', mode === 'scale');
         firstPoint = null;
-        if(mode !== 'scale') toggleMenu(); // モードを選んだら自動でメニューを閉じる
     }
 
-    document.getElementById('upload').onchange = async (e) => {
+    document.getElementById('upload-input').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const container = document.getElementById('container-' + currentFloor);
         container.innerHTML = ''; 
+        
         const canvas = document.createElement('canvas');
         container.appendChild(canvas);
 
@@ -167,15 +153,15 @@
             }
         };
         reader.readAsArrayBuffer(file);
-
         canvas.onclick = (ev) => { handleCanvasClick(ev.offsetX, ev.offsetY, container); };
-        toggleMenu(); // 読み込んだら閉じる
+        toggleMenu();
+        e.target.value = ''; // 連続で同じファイルを選べるようにリセット
     };
 
     function handleCanvasClick(x, y, container) {
         if (currentMode === 'scale') {
             if (!firstPoint) firstPoint = {x, y};
-            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); }
+            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); alert(currentFloor + "のスケール設定完了"); }
         } else if (currentMode === 'riser') {
             const r = document.createElement('div');
             r.className = 'riser';
@@ -219,7 +205,7 @@
         const target = document.getElementById('container-' + currentFloor);
         const canvas = await html2canvas(target);
         const link = document.createElement('a');
-        link.download = `水道_${currentFloor}.png`;
+        link.download = `水道図面_${currentFloor}.png`;
         link.href = canvas.toDataURL();
         link.click();
     }
