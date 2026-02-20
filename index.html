@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水道屋アプリ v1.0</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #header { background: #333; color: white; padding: 10px; text-align: center; }
+        #canvas-container { flex: 1; position: relative; overflow: auto; background: #eee; border: 2px dashed #ccc; }
+        #blueprint { display: block; max-width: 100%; cursor: crosshair; }
+        .marker { position: absolute; width: 12px; height: 12px; background: red; border-radius: 50%; transform: translate(-50%, -50%); }
+        #controls { padding: 15px; background: #f9f9f9; border-top: 1px solid #ddd; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="header">水道屋アプリ：図面プロット試作</div>
+
+<div id="controls">
+    <input type="file" id="upload" accept="image/*">
+    <p>図面を選択して、スリーブや金具を置きたい場所をクリックしてください。</p>
+    <div id="stats">合計金具数: <span id="count">0</span> 個</div>
+</div>
+
+<div id="canvas-container" id="container">
+    <img id="blueprint" src="" style="display:none;">
+</div>
+
+<script>
+    const upload = document.getElementById('upload');
+    const blueprint = document.getElementById('blueprint');
+    const container = document.getElementById('canvas-container');
+    const countSpan = document.getElementById('count');
+    let markerCount = 0;
+
+    // 画像読み込み
+    upload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (f) => {
+            blueprint.src = f.target.result;
+            blueprint.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // クリックでマーカー配置
+    container.addEventListener('click', (e) => {
+        if (!blueprint.src) return;
+        
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left + container.scrollLeft;
+        const y = e.clientY - rect.top + container.scrollTop;
+
+        const marker = document.createElement('div');
+        marker.className = 'marker';
+        marker.style.left = x + 'px';
+        marker.style.top = y + 'px';
+        container.appendChild(marker);
+
+        markerCount++;
+        countSpan.innerText = markerCount;
+    });
+</script>
+
+</body>
+</html>
