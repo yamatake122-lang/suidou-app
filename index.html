@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>水道屋アプリ v1.3 (スケール対応)</title>
+    <title>水道屋アプリ v1.4 (戻る機能付)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
@@ -12,9 +12,10 @@
         #canvas-container { flex: 1; position: relative; overflow: auto; background: #ddd; }
         canvas { display: block; cursor: crosshair; }
         .marker { position: absolute; width: 12px; height: 12px; background: rgba(0, 123, 255, 0.8); border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; transition: 0.3s; }
+        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; }
         .btn-blue { background: #007bff; color: white; }
         .btn-green { background: #28a745; color: white; }
+        .btn-gray { background: #6c757d; color: white; }
         .btn-red { background: #dc3545; color: white; }
         .active { background: #ffc107 !important; color: black !important; font-weight: bold; }
         .info-text { margin-top: 5px; color: #555; font-weight: bold; }
@@ -22,15 +23,16 @@
 </head>
 <body>
 
-<div id="header">水道屋アプリ：1mピッチ自動配置</div>
+<div id="header">水道屋アプリ：戻るボタン追加版</div>
 
 <div id="controls">
     <input type="file" id="upload" accept="image/*,.pdf">
     <hr>
-    <button id="scale-btn" class="btn-blue">① 1mの長さを設定</button>
-    <button id="auto-btn" class="btn-green">② 1mピッチ自動配置</button>
+    <button id="scale-btn" class="btn-blue">① スケール設定</button>
+    <button id="auto-btn" class="btn-green">② 1mピッチ配置</button>
+    <button id="undo-btn" class="btn-gray">↩ 一つ戻る</button>
     <button onclick="location.reload()" class="btn-red">リセット</button>
-    <div class="info-text" id="status-msg">まずは図面を読み込んでください</div>
+    <div class="info-text" id="status-msg">図面を読み込んでください</div>
 </div>
 
 <div id="canvas-container">
@@ -41,31 +43,40 @@
     const url = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
     pdfjsLib.GlobalWorkerOptions.workerSrc = url;
 
-    const upload = document.getElementById('upload');
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
     const container = document.getElementById('canvas-container');
     const statusMsg = document.getElementById('status-msg');
     
     let pixelsPerMeter = 0; 
-    let mode = 'idle'; // idle, settingScale, autoPlacing
+    let mode = 'idle';
     let firstPoint = null;
+    let history = []; // 操作の履歴を保存する箱
 
     // モード切り替え
     document.getElementById('scale-btn').onclick = () => {
         mode = 'settingScale';
         updateUI();
-        statusMsg.innerText = "図面上の「1m（1000mm）」の区間を2点クリックしてください";
+        statusMsg.innerText = "図面上の「1m」の区間を2点クリックしてください";
     };
 
     document.getElementById('auto-btn').onclick = () => {
-        if(pixelsPerMeter === 0) {
-            alert("先に1mの長さを設定してください");
-            return;
-        }
+        if(pixelsPerMeter === 0) { alert("先に1mの設定が必要です"); return; }
         mode = 'autoPlacing';
         updateUI();
-        statusMsg.innerText = "配管の始点と終点をクリックしてください（1m間隔で配置します）";
+        statusMsg.innerText = "始点と終点をクリック（1m間隔で配置）";
+    };
+
+    // ↩ 戻るボタンの処理
+    document.getElementById('undo-btn').onclick = () => {
+        if (history.length === 0) return;
+        
+        // 最後に履歴に追加した「マーカーの配列」を取り出す
+        const lastAction = history.pop();
+        lastAction.forEach(marker => {
+            container.removeChild(marker);
+        });
+        statusMsg.innerText = "一つ前の操作を取り消しました";
     };
 
     function updateUI() {
@@ -74,10 +85,9 @@
         firstPoint = null;
     }
 
-    upload.addEventListener('change', async (e) => {
+    document.getElementById('upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        statusMsg.innerText = "読み込み中...";
         if (file.type === "application/pdf") {
             const reader = new FileReader();
             reader.onload = async function() {
@@ -85,16 +95,11 @@
                 const pdf = await pdfjsLib.getDocument(typedarray).promise;
                 const page = await pdf.getPage(1);
                 const viewport = page.getViewport({scale: 2.0});
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
+                canvas.height = viewport.height; canvas.width = viewport.width;
                 await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                statusMsg.innerText = "図面読込完了：①でスケールを設定してください";
+                statusMsg.innerText = "読込完了。①でスケールを設定してください";
             };
             reader.readAsArrayBuffer(file);
-        } else {
-            const img = new Image();
-            img.onload = () => { canvas.width = img.width; canvas.height = img.height; ctx.drawImage(img, 0, 0); statusMsg.innerText = "画像読込完了：①でスケールを設定してください";};
-            img.src = URL.createObjectURL(file);
         }
     });
 
@@ -104,36 +109,39 @@
         const y = e.clientY - rect.top;
 
         if (mode === 'settingScale') {
-            if (!firstPoint) {
-                firstPoint = {x, y};
-            } else {
+            if (!firstPoint) { firstPoint = {x, y}; } 
+            else {
                 pixelsPerMeter = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
-                statusMsg.innerText = "スケール設定完了！ ②の自動配置が使えます";
-                mode = 'idle';
-                updateUI();
+                statusMsg.innerText = "設定完了！ ②が使えます";
+                mode = 'idle'; updateUI();
             }
         } else if (mode === 'autoPlacing') {
             if (!firstPoint) {
                 firstPoint = {x, y};
-                addMarker(x, y);
+                const m = createMarker(x, y);
+                history.push([m]); // 履歴に保存
             } else {
+                const currentBatch = [];
                 const dist = Math.sqrt(Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2));
                 const steps = Math.floor(dist / pixelsPerMeter);
                 for (let i = 1; i <= steps; i++) {
                     const ratio = i / steps;
-                    addMarker(firstPoint.x + (x - firstPoint.x) * ratio, firstPoint.y + (y - firstPoint.y) * ratio);
+                    const m = createMarker(firstPoint.x + (x - firstPoint.x) * ratio, firstPoint.y + (y - firstPoint.y) * ratio);
+                    currentBatch.push(m);
                 }
+                history.push(currentBatch); // まとめて履歴に保存
                 firstPoint = null;
             }
         }
     });
 
-    function addMarker(x, y) {
+    function createMarker(x, y) {
         const marker = document.createElement('div');
         marker.className = 'marker';
         marker.style.left = x + 'px';
         marker.style.top = y + 'px';
         container.appendChild(marker);
+        return marker;
     }
 </script>
 
