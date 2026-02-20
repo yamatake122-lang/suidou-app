@@ -3,71 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v1.9.1 (PDFページ対応)</title>
+    <title>水道屋アプリ v2.0 (ミニコマンド版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; overflow: hidden; background: #222; height: 100vh; display: flex; flex-direction: column; }
-        #top-bar { background: #000; color: white; padding: 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
-        #menu-toggle { background: #007bff; border: none; color: white; padding: 5px 15px; border-radius: 4px; font-weight: bold; }
-        #controls { 
-            position: absolute; top: 45px; right: 0; left: 0;
-            background: rgba(244, 244, 244, 0.95); padding: 15px; 
-            border-bottom: 2px solid #ccc; z-index: 90;
-            display: none; max-height: 80vh; overflow-y: auto;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        body { font-family: sans-serif; margin: 0; overflow: hidden; background: #222; height: 100vh; }
+        
+        /* 階数切り替えだけは上部に固定 */
+        #top-tabs { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 100; background: rgba(0,0,0,0.8); }
+        .tab { flex: 1; padding: 12px; text-align: center; color: #fff; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; }
+        .tab.active { border-bottom: 3px solid #007bff; background: #333; }
+
+        /* フローティングメニュー（隠しメニュー） */
+        #mini-menu { 
+            position: absolute; display: none; background: rgba(255,255,255,0.95); 
+            border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+            padding: 10px; z-index: 1000; width: 220px;
         }
-        #controls.open { display: block; }
-        #canvas-area { flex: 1; position: relative; overflow: auto; background: #333; }
-        .page-container { position: relative; display: none; min-width: 100%; min-height: 100%; }
+        
+        #canvas-area { width: 100vw; height: 100vh; overflow: auto; background: #333; }
+        .page-container { position: relative; display: none; }
         .page-container.active { display: block; }
         canvas { display: block; }
+
+        /* 描画パーツ */
         .marker { position: absolute; width: 10px; height: 10px; border: 1px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        .riser { position: absolute; width: 16px; height: 16px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; }
+        .riser { position: absolute; width: 18px; height: 18px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px inset white; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
-        .btn-group { margin-bottom: 10px; }
-        .label { font-size: 12px; font-weight: bold; margin-bottom: 5px; display: block; }
-        button { padding: 8px; cursor: pointer; border: none; border-radius: 4px; margin: 2px; font-weight: bold; }
-        .active-btn { outline: 3px solid orange; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-        .tab-btn { background: #444; color: white; flex: 1; }
-        .tab-btn.active { background: #007bff; }
+
+        /* ボタンデザイン */
+        .cmd-btn { padding: 8px; margin: 2px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-gray { background: #6c757d; color: white; }
+        .active-mode { outline: 3px solid orange; }
+        .row { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 8px; }
+        label { font-size: 10px; color: #666; display: block; width: 100%; }
     </style>
 </head>
 <body>
 
-<div id="top-bar">
-    <div style="display:flex; gap:5px; flex:1;">
-        <button class="tab-btn active" id="tab-1F" onclick="switchTab('1F')">1F</button>
-        <button class="tab-btn" id="tab-2F" onclick="switchTab('2F')">2F</button>
+<div id="top-tabs">
+    <div class="tab active" onclick="switchTab('1F')">1F</div>
+    <div class="tab" onclick="switchTab('2F')">2F</div>
+    <div class="tab" style="background:#444;" onclick="document.getElementById('file-input').click()">📁 読込</div>
+</div>
+<input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
+
+<div id="mini-menu">
+    <label>管種 & サイズ</label>
+    <div class="row">
+        <button class="cmd-btn" onclick="setType('haisui', '75')" style="background:#808080; color:white;">排75</button>
+        <button class="cmd-btn" onclick="setType('haisui', '50')" style="background:#808080; color:white;">排50</button>
+        <button class="cmd-btn" onclick="setType('kyusui', '16')" style="background:#0000ff; color:white;">給16</button>
+        <button class="cmd-btn" onclick="setType('kyuto', '16')" style="background:#ff0000; color:white;">湯16</button>
     </div>
-    <button id="menu-toggle" onclick="toggleMenu()">≡ メニュー</button>
+    <label>モード</label>
+    <div class="row">
+        <button id="m-route" class="cmd-btn btn-blue active-mode" onclick="setMode('route')">🖊ルート</button>
+        <button id="m-riser" class="cmd-btn btn-blue" onclick="setMode('riser')">◎立上り</button>
+        <button id="m-scale" class="cmd-btn btn-gray" onclick="setMode('scale')">📏尺</button>
+    </div>
+    <div class="row">
+        <button class="cmd-btn btn-gray" style="flex:1" onclick="undo()">↩戻る</button>
+        <button class="cmd-btn btn-green" style="flex:1" onclick="saveImage()">📸保存</button>
+    </div>
 </div>
 
-<div id="controls">
-    <span class="label">PDFの1枚目(1F) / 2枚目(2F) を読み込み:</span>
-    <input type="file" id="upload-input" accept=".pdf,image/*" style="width:100%;">
-    <hr>
-    <div class="btn-group">
-        <button onclick="setMode('scale')" id="btn-scale" style="background:#555; color:white;">📏 スケール設定</button>
-        <button onclick="undo()" style="background:#eee; border:1px solid #ccc;">↩ 戻る</button>
-    </div>
-    <span class="label">管種:</span>
-    <div class="btn-group">
-        <button class="type-btn active-btn" id="t-haisui" onclick="setType('haisui')" style="background:#808080; color:white;">排水</button>
-        <button class="type-btn" id="t-kyusui" onclick="setType('kyusui')" style="background:#0000ff; color:white;">給水</button>
-        <button class="type-btn" id="t-kyuto" onclick="setType('kyuto')" style="background:#ff0000; color:white;">給湯</button>
-    </div>
-    <span class="label">サイズ:</span>
-    <div id="size-selector" class="btn-group"></div>
-    <span class="label">モード:</span>
-    <div class="btn-group">
-        <button id="btn-route" onclick="setMode('route')" style="background:#007bff; color:white;" class="active-btn">🖊 ルート</button>
-        <button id="btn-riser" onclick="setMode('riser')" style="background:#007bff; color:white;">◎ 立ち上がり</button>
-    </div>
-    <button onclick="saveImage()" style="background:#28a745; color:white; width:100%; padding:12px; margin-top:10px;">📸 画像を保存 (LINE用)</button>
-</div>
-
-<div id="canvas-area">
+<div id="canvas-area" onclick="handleBackgroundClick(event)">
     <div id="container-1F" class="page-container active"></div>
     <div id="container-2F" class="page-container"></div>
 </div>
@@ -90,50 +93,45 @@
         kyuto:  { color: '#ff0000', sizes: { '16': 6, '13': 3 } }
     };
 
-    function toggleMenu() { document.getElementById('controls').classList.toggle('open'); }
+    // 背景クリックでメニューを出す/消す
+    function handleBackgroundClick(e) {
+        if (e.target.tagName === 'CANVAS') {
+            const menu = document.getElementById('mini-menu');
+            if (menu.style.display === 'block') {
+                menu.style.display = 'none';
+            } else {
+                menu.style.display = 'block';
+                menu.style.left = Math.min(e.pageX, window.innerWidth - 230) + 'px';
+                menu.style.top = Math.min(e.pageY, window.innerHeight - 150) + 'px';
+            }
+        }
+    }
 
     function switchTab(floor) {
         currentFloor = floor;
-        document.getElementById('tab-1F').classList.toggle('active', floor === '1F');
-        document.getElementById('tab-2F').classList.toggle('active', floor === '2F');
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.innerText === floor));
         document.getElementById('container-1F').classList.toggle('active', floor === '1F');
         document.getElementById('container-2F').classList.toggle('active', floor === '2F');
-        firstPoint = null;
+        document.getElementById('mini-menu').style.display = 'none';
     }
 
-    function setType(type) {
-        currentType = type;
-        document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active-btn', b.id === 't-'+type));
-        renderSizeButtons();
+    function setType(type, size) {
+        currentType = type; currentSize = size;
+        document.getElementById('mini-menu').style.display = 'none';
     }
-
-    function renderSizeButtons() {
-        const sel = document.getElementById('size-selector');
-        sel.innerHTML = '';
-        Object.keys(config[currentType].sizes).forEach(size => {
-            const b = document.createElement('button');
-            b.className = (currentSize === size ? 'active-btn' : '');
-            b.innerText = size;
-            b.style.backgroundColor = config[currentType].color; b.style.color = "white";
-            b.onclick = () => { currentSize = size; renderSizeButtons(); };
-            sel.appendChild(b);
-        });
-    }
-    renderSizeButtons();
 
     function setMode(mode) {
         currentMode = mode;
-        document.getElementById('btn-route').classList.toggle('active-btn', mode === 'route');
-        document.getElementById('btn-riser').classList.toggle('active-btn', mode === 'riser');
-        document.getElementById('btn-scale').classList.toggle('active-btn', mode === 'scale');
-        firstPoint = null;
+        document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active-mode'));
+        document.getElementById('m-' + mode).classList.add('active-mode');
+        document.getElementById('mini-menu').style.display = 'none';
     }
 
-    document.getElementById('upload-input').onchange = async (e) => {
+    document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const container = document.getElementById('container-' + currentFloor);
-        container.innerHTML = ''; 
+        container.innerHTML = '';
         const canvas = document.createElement('canvas');
         container.appendChild(canvas);
 
@@ -141,11 +139,8 @@
         reader.onload = async function() {
             if (file.type === "application/pdf") {
                 const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-                
-                // 階数に応じてページを変える
                 let pageNum = (currentFloor === '1F') ? 1 : 2;
                 if (pdf.numPages < pageNum) pageNum = 1;
-
                 const page = await pdf.getPage(pageNum);
                 const vp = page.getViewport({scale: 2.0});
                 canvas.width = vp.width; canvas.height = vp.height;
@@ -157,15 +152,17 @@
             }
         };
         reader.readAsArrayBuffer(file);
-        canvas.onclick = (ev) => { handleCanvasClick(ev.offsetX, ev.offsetY, container); };
-        toggleMenu();
-        e.target.value = '';
+        // キャンバスクリック時の描画処理
+        canvas.addEventListener('click', (ev) => {
+            ev.stopPropagation(); // 背景クリックイベント（メニュー表示）を防ぐ
+            handleDraw(ev.offsetX, ev.offsetY, container);
+        });
     };
 
-    function handleCanvasClick(x, y, container) {
+    function handleDraw(x, y, container) {
         if (currentMode === 'scale') {
             if (!firstPoint) firstPoint = {x, y};
-            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); alert(currentFloor + "のスケール設定完了"); }
+            else { pixelsPerMeter[currentFloor] = Math.sqrt((x-firstPoint.x)**2 + (y-firstPoint.y)**2); setMode('route'); }
         } else if (currentMode === 'riser') {
             const r = document.createElement('div');
             r.className = 'riser';
@@ -173,7 +170,7 @@
             container.appendChild(r);
             history[currentFloor].push([r]);
         } else if (currentMode === 'route') {
-            if (!firstPoint) firstPoint = {x, y};
+            if (!firstPoint) { firstPoint = {x, y}; } 
             else {
                 if (!pixelsPerMeter[currentFloor]) return alert("先にスケール設定を！");
                 const batch = [];
@@ -187,7 +184,7 @@
                 line.style.transform = `rotate(${angle}rad) translateY(-50%)`;
                 container.appendChild(line);
                 batch.push(line);
-                const steps = Math.floor(dist / pixelsPerMeter[currentFloor]);
+                const steps = Math.max(1, Math.floor(dist / pixelsPerMeter[currentFloor]));
                 for(let i=0; i<=steps; i++) {
                     const m = document.createElement('div');
                     m.className = 'marker'; m.style.backgroundColor = config[currentType].color;
@@ -202,14 +199,14 @@
         }
     }
 
-    function undo() { const h = history[currentFloor]; if (h.length > 0) h.pop().forEach(el => el.remove()); }
+    function undo() { const h = history[currentFloor]; if (h.length > 0) h.pop().forEach(el => el.remove()); document.getElementById('mini-menu').style.display = 'none'; }
 
     async function saveImage() {
-        toggleMenu();
+        document.getElementById('mini-menu').style.display = 'none';
         const target = document.getElementById('container-' + currentFloor);
         const canvas = await html2canvas(target);
         const link = document.createElement('a');
-        link.download = `水道図面_${currentFloor}.png`;
+        link.download = `水道_${currentFloor}.png`;
         link.href = canvas.toDataURL();
         link.click();
     }
