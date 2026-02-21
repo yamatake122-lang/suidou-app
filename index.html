@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v4.8 (PC対応版)</title>
+    <title>水道屋アプリ v4.9</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #1a1a1a; height: 100vh; color: white; }
         
         /* 上部バー */
-        #top-bar { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 2000; background: #000; height: 45px; align-items: center; padding: 0 10px; border-bottom: 1px solid #333; }
-        #file-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; flex-shrink: 0; margin-right: 10px; }
+        #top-bar { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 2000; background: #000; height: 45px; align-items: center; padding: 0 10px; border-bottom: 1px solid #333; gap: 5px; }
+        #file-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
         #top-tabs { display: flex; overflow-x: auto; flex-grow: 1; scrollbar-width: none; }
         .tab { padding: 10px 15px; cursor: pointer; font-size: 12px; border-bottom: 3px solid transparent; white-space: nowrap; color: #aaa; }
         .tab.active { border-bottom: 3px solid #007bff; background: #222; color: white; }
-        #quick-undo { background: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; flex-shrink: 0; margin-left: 10px; }
+        #quick-undo { background: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+        #scale-btn { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; flex-shrink: 0; }
 
         /* 集計パネル */
         #live-counter {
@@ -23,24 +24,20 @@
             z-index: 500; font-family: monospace; border: 1px solid #0f0; line-height: 1.3; width: 190px; pointer-events: none;
         }
 
-        /* ツールメニュー（自在移動） */
+        /* ツールメニュー */
         #mini-menu { 
             position: absolute; display: none; background: #fff; color: #333;
             border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); 
             padding: 10px 15px 15px 15px; z-index: 4000; width: 280px;
-            top: 100px; left: 20px; cursor: default;
+            top: 100px; left: 20px;
         }
-        /* 右上の閉じるボタン */
         #menu-close-x {
             position: absolute; top: 8px; right: 8px; width: 30px; height: 30px;
             background: #d9534f; color: white; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             font-weight: bold; cursor: pointer; font-size: 18px; border: 2px solid #fff; z-index: 4100;
         }
-        #menu-handle { 
-            width: 100%; height: 25px; display: flex; align-items: center; justify-content: center; 
-            color: #ccc; font-size: 20px; margin-bottom: 5px; cursor: move;
-        }
+        #menu-handle { width: 100%; height: 25px; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 20px; margin-bottom: 5px; cursor: move; }
         #menu-handle::after { content: "⠿"; }
 
         /* フローティングボタン */
@@ -57,7 +54,7 @@
         canvas { display: block; background: white; cursor: crosshair; }
         .active-sel { outline: 4px solid #ff9800 !important; outline-offset: -2px; }
 
-        /* スタンプ・配管 */
+        /* 配管・スタンプ（前回同様の配色） */
         .riser { position: absolute; width: 20px; height: 20px; border: 3px solid #1e7e34; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; background: rgba(255,255,255,0.8); z-index: 10; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; z-index: 5; }
         .pipe-75 { height: 10px !important; } .pipe-50 { height: 6px !important; } .pipe-16 { height: 4px !important; } .pipe-13 { height: 3px !important; }
@@ -77,6 +74,7 @@
     <button id="file-btn" onclick="document.getElementById('file-input').click()">📁 読込</button>
     <div id="top-tabs"></div>
     <button id="quick-undo" onclick="undo()">↩ 戻る</button>
+    <button id="scale-btn" onclick="setMode('scale')">📏 尺設定</button>
 </div>
 <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
 
@@ -126,10 +124,6 @@
         <button id="btn-kyuto-13" class="cmd-btn" onclick="setType('kyuto', '13')" style="background:#ff0000; color:white;">湯13</button>
         <button id="btn-kyuto-16" class="cmd-btn" onclick="setType('kyuto', '16')" style="background:#ff5500; color:white;">湯16</button>
     </div>
-
-    <div class="row" style="margin-top:10px;">
-        <button id="btn-mode-scale" class="cmd-btn btn-blue" onclick="setMode('scale')">📏尺設定</button>
-    </div>
 </div>
 
 <div id="canvas-area"></div>
@@ -140,8 +134,9 @@
 
     let currentPageId = null, pageData = {}, globalPixelsPerMeter = 0;
     let currentType = 'haisui', currentSize = '75', currentMode = 'route', selectedSub = '', firstPoint = null;
+    let menuClosedThisAction = false; // メニューを閉じた直後の誤描画防止
 
-    // --- メニュードラッグ機能 (マウス/タッチ両対応) ---
+    // --- メニュードラッグ機能 ---
     const menu = document.getElementById('mini-menu');
     let isDragging = false, startX, startY, initialX, initialY;
 
@@ -150,25 +145,19 @@
         isDragging = true;
         const clientX = e.clientX || e.touches[0].clientX;
         const clientY = e.clientY || e.touches[0].clientY;
-        startX = clientX;
-        startY = clientY;
-        initialX = menu.offsetLeft;
-        initialY = menu.offsetTop;
+        startX = clientX; startY = clientY;
+        initialX = menu.offsetLeft; initialY = menu.offsetTop;
         if (e.type === 'touchstart') e.stopPropagation();
     };
-
     const moveDrag = (e) => {
         if (!isDragging) return;
         const clientX = e.clientX || (e.touches ? e.touches[0].clientX : null);
         const clientY = e.clientY || (e.touches ? e.touches[0].clientY : null);
         if (clientX === null) return;
-        const dx = clientX - startX;
-        const dy = clientY - startY;
-        menu.style.left = (initialX + dx) + 'px';
-        menu.style.top = (initialY + dy) + 'px';
+        menu.style.left = (initialX + (clientX - startX)) + 'px';
+        menu.style.top = (initialY + (clientY - startY)) + 'px';
         e.preventDefault();
     };
-
     const endDrag = () => { isDragging = false; };
 
     menu.addEventListener('mousedown', startDrag);
@@ -177,6 +166,41 @@
     window.addEventListener('touchmove', moveDrag, {passive: false});
     window.addEventListener('mouseup', endDrag);
     window.addEventListener('touchend', endDrag);
+
+    // --- 各種ロジック ---
+    function updateActiveButtonUI() {
+        document.querySelectorAll('.cmd-btn, #scale-btn').forEach(b => b.classList.remove('active-sel'));
+        if(currentMode === 'route') {
+            document.getElementById(`btn-${currentType}-${currentSize}`)?.classList.add('active-sel');
+            document.getElementById('btn-mode-route').classList.add('active-sel');
+        } else if(currentMode === 'riser') {
+            document.getElementById(`btn-riser-${selectedSub}`)?.classList.add('active-sel');
+        } else if(currentMode === 'parts') {
+            document.getElementById(`btn-parts-${selectedSub}`)?.classList.add('active-sel');
+        } else if(currentMode === 'kigu') {
+            document.getElementById(`btn-kigu-${selectedSub}`)?.classList.add('active-sel');
+        } else if(currentMode === 'scale') {
+            document.getElementById('scale-btn').classList.add('active-sel');
+        }
+    }
+
+    function toggleMenu() {
+        if (menu.style.display === 'block') {
+            menu.style.display = 'none';
+            menuClosedThisAction = true; // 閉じたフラグを立てる
+            setTimeout(() => { menuClosedThisAction = false; }, 300);
+        } else {
+            menu.style.display = 'block';
+            updateActiveButtonUI();
+        }
+        firstPoint = null;
+    }
+
+    function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; updateActiveButtonUI(); }
+    function setMode(mode, sub = '') { 
+        currentMode = mode; selectedSub = sub; updateActiveButtonUI(); 
+        if(mode !== 'route') toggleMenu();
+    }
 
     // --- 集計ロジック ---
     const kiguSettings = {
@@ -208,36 +232,7 @@
         document.getElementById('cnt-support').innerHTML = `支持(75): ${Math.ceil(h75m)+r75} / 支持(50): ${Math.ceil(h50m)+r50} / 支持(給): ${Math.ceil(ktm)+kCount*2}`;
     }
 
-    // --- 各種操作 ---
-    function updateActiveButtonUI() {
-        document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active-sel'));
-        if(currentMode === 'route') {
-            document.getElementById(`btn-${currentType}-${currentSize}`)?.classList.add('active-sel');
-            document.getElementById('btn-mode-route').classList.add('active-sel');
-        } else if(currentMode === 'riser') {
-            document.getElementById(`btn-riser-${selectedSub}`)?.classList.add('active-sel');
-        } else if(currentMode === 'parts') {
-            document.getElementById(`btn-parts-${selectedSub}`)?.classList.add('active-sel');
-        } else if(currentMode === 'kigu') {
-            document.getElementById(`btn-kigu-${selectedSub}`)?.classList.add('active-sel');
-        } else if(currentMode === 'scale') {
-            document.getElementById('btn-mode-scale').classList.add('active-sel');
-        }
-    }
-
-    function toggleMenu() {
-        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-        if(menu.style.display === 'block') updateActiveButtonUI();
-        firstPoint = null;
-    }
-
-    function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; updateActiveButtonUI(); }
-    function setMode(mode, sub = '') { 
-        currentMode = mode; selectedSub = sub; updateActiveButtonUI(); 
-        if(mode !== 'route') setTimeout(() => { menu.style.display = 'none'; }, 200);
-    }
-
-    // --- ファイル・描画 ---
+    // --- ファイル・ページ管理 ---
     document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0]; if(!file) return;
         const topTabs = document.getElementById('top-tabs'), canvasArea = document.getElementById('canvas-area');
@@ -268,7 +263,10 @@
     function createPageUI(id, topTabs, canvasArea) {
         const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
         const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
-        canvas.onclick=(ev)=>handleDraw(ev.offsetX, ev.offsetY, container);
+        canvas.addEventListener('mousedown', (ev) => {
+            if(menu.style.display==='block' || menuClosedThisAction) return;
+            handleDraw(ev.offsetX, ev.offsetY, container);
+        });
         container.appendChild(canvas); canvasArea.appendChild(container);
         pageData[id] = { history:[] };
         const tab = document.createElement('div'); tab.id='tab-'+id; tab.className='tab'; tab.innerText=id;
@@ -285,7 +283,6 @@
     }
 
     function handleDraw(x, y, container) {
-        if(menu.style.display==='block' || isDragging) { menu.style.display='none'; return; }
         const data = pageData[currentPageId];
         if(currentMode==='scale'){
             if(!firstPoint) firstPoint={x,y};
