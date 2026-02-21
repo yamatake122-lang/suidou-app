@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v4.0 (材料自動集計プロトタイプ)</title>
+    <title>水道屋アプリ v4.1</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #1a1a1a; height: 100vh; color: white; }
         #top-tabs { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 100; background: #000; overflow-x: auto; height: 45px; }
         .tab { padding: 12px 15px; cursor: pointer; font-size: 13px; border-bottom: 3px solid transparent; white-space: nowrap; }
         .tab.active { border-bottom: 3px solid #007bff; background: #333; }
 
-        /* リアルタイム集計パネル（右上に固定） */
+        /* 集計パネル（表示・非表示対応） */
         #live-counter {
             position: fixed; top: 55px; right: 10px; background: rgba(0,0,0,0.9);
             color: #0f0; padding: 10px; border-radius: 8px; font-size: 10px;
-            pointer-events: none; z-index: 500; font-family: monospace; border: 1px solid #0f0; line-height: 1.3; width: 190px;
+            z-index: 500; font-family: monospace; border: 1px solid #0f0; line-height: 1.3; width: 190px;
         }
+        .hide-panel { display: none; }
+        #toggle-panel-btn { position: absolute; top: -25px; right: 0; background: #0f0; color: #000; border: none; font-size: 10px; cursor: pointer; padding: 2px 8px; border-radius: 4px 4px 0 0; font-weight: bold; pointer-events: auto; }
 
         #floating-toggle {
             position: fixed; bottom: 20px; right: 20px; width: 65px; height: 65px;
@@ -37,86 +38,81 @@
         .page-container.active { display: block; }
         canvas { display: block; background: white; }
 
-        /* スタンプ・線のデザイン */
         .riser { position: absolute; width: 20px; height: 20px; border: 2px solid #28a745; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; background: white; z-index: 10; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; }
         .pipe-75 { height: 12px !important; }
         .pipe-50 { height: 7px !important; }
+        .pipe-16 { height: 5px !important; }
+        .pipe-13 { height: 4px !important; }
         .kigu-stamp { position: absolute; padding: 2px 5px; background: #ffeb3b; border: 1px solid #333; border-radius: 4px; font-size: 10px; font-weight: bold; transform: translate(-50%, -50%); pointer-events: none; color: black; z-index: 20; }
         .parts-stamp { position: absolute; padding: 2px 5px; background: #28a745; color: white; border: 1px solid white; border-radius: 3px; font-size: 10px; font-weight: bold; transform: translate(-50%, -50%); pointer-events: none; z-index: 15; }
 
-        .cmd-btn { padding: 10px 5px; margin: 2px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; flex: 1; text-align: center; }
+        .cmd-btn { padding: 10px 5px; margin: 2px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; flex: 1; text-align: center; }
         .btn-green { background: #28a745; color: white; }
         .btn-blue { background: #007bff; color: white; }
         .btn-gray { background: #6c757d; color: white; }
         .btn-yellow { background: #fbc02d; color: black; }
-        .row { display: flex; gap: 4px; margin-bottom: 8px; }
-        label { font-size: 11px; font-weight: bold; color: #555; display: block; margin: 5px 0; border-left: 4px solid #007bff; padding-left: 8px; }
+        .row { display: flex; gap: 4px; margin-bottom: 6px; }
+        label { font-size: 10px; font-weight: bold; color: #555; display: block; margin: 4px 0; border-left: 4px solid #007bff; padding-left: 8px; }
     </style>
 </head>
 <body>
 
 <div id="top-tabs">
-    <div class="tab" style="background:#444;" onclick="document.getElementById('file-input').click()">📁 PDF/画像読込</div>
+    <div class="tab" style="background:#444;" onclick="document.getElementById('file-input').click()">📁 PDF読込</div>
 </div>
 <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
 
 <div id="live-counter">
-    <div style="border-bottom:1px solid #0f0; margin-bottom:5px; font-weight:bold;">【材料集計結果】</div>
-    <div id="cnt-haisui">
-        排75: 0.0m / 50: 0.0m<br>
-        75L: 0 / 50L: 0 / 75T: 0 / 50T: 0<br>
-        <span style="color:#ff9800;">異径75-50S: 0 / 75-50T: 0</span>
+    <button id="toggle-panel-btn" onclick="togglePanel()">表示/非表示</button>
+    <div id="panel-content">
+        <div style="border-bottom:1px solid #0f0; margin-bottom:5px; font-weight:bold;">【材料集計結果】</div>
+        <div id="cnt-haisui">排水75: 0.0m / 50: 0.0m<br>75L: 0 / 50L: 0 / 75T: 0 / 50T: 0</div>
+        <div id="cnt-kt" style="border-top:1px dotted #555; margin-top:5px; padding-top:5px;">給湯: 0.0m / 床座S: 0 / 座L: 0 / 弁: 0</div>
+        <div id="cnt-support" style="color:#00ffff; border-top:1px solid #00ffff; margin-top:5px;">支持(75): 0 / 支持(50): 0 / 支持(給): 0</div>
     </div>
-    <div id="cnt-kt" style="border-top:1px dotted #555; margin-top:5px; padding-top:5px;">
-        給湯: 0.0m / 床座S: 0 / 座L: 1 / 弁: 0 / ﾕﾆ: 0
-    </div>
-    <div id="cnt-support" style="color:#00ffff; border-top:1px solid #00ffff; margin-top:5px;">
-        支持(75): 0 / 支持(50): 0 / 支持(給): 0
-    </div>
-    <div style="margin-top:5px; border-top:1px solid #555; font-size:9px;">排水立上(計): <span id="cnt-riser">0</span></div>
 </div>
 
 <button id="floating-toggle" onclick="toggleMenu()">🛠</button>
 
 <div id="mini-menu">
-    <label>排水 75用</label>
+    <label>排水 描画</label>
     <div class="row">
-        <button class="cmd-btn" onclick="setType('haisui', '75')" style="background:#1e7e34; color:white;">🖊75管</button>
-        <button class="cmd-btn btn-green" onclick="setMode('riser', '75')">◎75立上</button>
-        <button class="cmd-btn btn-green" onclick="setMode('parts', '75T')">┳75T</button>
+        <button class="cmd-btn" onclick="setType('haisui', '75')" style="background:#1e7e34; color:white;">排75線</button>
+        <button class="cmd-btn" onclick="setType('haisui', '50')" style="background:#28a745; color:white;">排50線</button>
+        <button class="cmd-btn btn-blue" onclick="setMode('route')">🖊配管描画</button>
     </div>
     
-    <label>排水 50用</label>
+    <label>排水 パーツ</label>
     <div class="row">
-        <button class="cmd-btn" onclick="setType('haisui', '50')" style="background:#28a745; color:white;">🖊50管</button>
+        <button class="cmd-btn btn-green" onclick="setMode('riser', '75')">◎75立上</button>
         <button class="cmd-btn btn-green" onclick="setMode('riser', '50')">◎50立上</button>
-        <button class="cmd-btn btn-green" onclick="setMode('parts', '50T')">┳50T</button>
-    </div>
-
-    <label>排水 異径 (75x50)</label>
-    <div class="row">
-        <button class="cmd-btn btn-yellow" onclick="setMode('parts', '75-50S')">異径ソケット</button>
         <button class="cmd-btn btn-yellow" onclick="setMode('parts', '75-50T')">異径チーズ</button>
     </div>
 
     <label>器具スタンプ</label>
     <div class="row">
-        <button class="cmd-btn btn-yellow" onclick="setMode('kigu', 'WC')">WC</button>
+        <button class="cmd-btn btn-yellow" onclick="setMode('kigu', 'WC')">トイレ</button>
         <button class="cmd-btn btn-yellow" onclick="setMode('kigu', '洗濯')">洗濯</button>
+        <button class="cmd-btn btn-yellow" onclick="setMode('kigu', 'キッチン')">キッチン</button>
         <button class="cmd-btn btn-yellow" onclick="setMode('kigu', '洗面')">洗面</button>
-        <button class="cmd-btn btn-yellow" onclick="setMode('kigu', '流し')">流し</button>
         <button class="cmd-btn btn-yellow" onclick="setMode('kigu', '風呂')">風呂</button>
     </div>
 
-    <label>給水・給湯 / ツール</label>
+    <label>給水・給湯 (13/16)</label>
     <div class="row">
         <button class="cmd-btn" onclick="setType('kyusui', '13')" style="background:#0000ff; color:white;">給13</button>
+        <button class="cmd-btn" onclick="setType('kyusui', '16')" style="background:#0055ff; color:white;">給16</button>
         <button class="cmd-btn" onclick="setType('kyuto', '13')" style="background:#ff0000; color:white;">湯13</button>
+        <button class="cmd-btn" onclick="setType('kyuto', '16')" style="background:#ff5500; color:white;">湯16</button>
+    </div>
+
+    <label>設定・操作</label>
+    <div class="row">
         <button class="cmd-btn btn-blue" onclick="setMode('scale')">📏尺設定</button>
         <button class="cmd-btn btn-gray" onclick="undo()">↩戻る</button>
+        <button class="cmd-btn btn-gray" onclick="toggleMenu()">❌閉じる</button>
     </div>
-    <button onclick="toggleMenu()" class="cmd-btn btn-gray" style="width:100%;">❌ 閉じる</button>
 </div>
 
 <div id="canvas-area"></div>
@@ -133,29 +129,29 @@
     let selectedSub = ''; 
     let firstPoint = null;
 
-    const config = {
-        haisui: { color: '#28a745' },
-        kyusui: { color: '#0000ff' },
-        kyuto:  { color: '#ff0000' }
-    };
+    const config = { haisui: { color: '#28a745' }, kyusui: { color: '#0000ff' }, kyuto:  { color: '#ff0000' } };
 
-    // 器具別の自動カウント設定
     const kiguSettings = {
-        'WC':   { label: 'WC', h75: 0.5, h50: 0, kt: 0.5, s: 1, l: 0, v: 0, u: 0, r75: 1, r50: 0 },
+        'WC':   { label: 'トイレ', h75: 0.5, h50: 0, kt: 0.5, s: 1, l: 0, v: 0, u: 0, r75: 1, r50: 0 },
         '洗濯': { label: '洗濯', h75: 0, h50: 0.5, kt: 0.5, s: 0, l: 1, v: 0, u: 0, r75: 0, r50: 1 },
+        'キッチン': { label: 'キッチン', h75: 0, h50: 0.5, kt: 1.5, s: 0, l: 0, v: 2, u: 0, r75: 0, r50: 1 },
         '洗面': { label: '洗面', h75: 0, h50: 0.5, kt: 1.0, s: 0, l: 0, v: 2, u: 0, r75: 0, r50: 1 },
-        '流し': { label: '流し', h75: 0, h50: 0.5, kt: 1.5, s: 0, l: 0, v: 2, u: 0, r75: 0, r50: 1 },
         '風呂': { label: '風呂', h75: 0, h50: 0, kt: 2.0, s: 0, l: 0, v: 0, u: 2, r75: 0, r50: 0 }
     };
 
     function toggleMenu() {
-        const menu = document.getElementById('mini-menu');
-        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        const m = document.getElementById('mini-menu');
+        m.style.display = (m.style.display === 'block') ? 'none' : 'block';
         firstPoint = null;
     }
 
-    function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; toggleMenu(); }
-    function setMode(mode, sub = '') { currentMode = mode; selectedSub = sub; toggleMenu(); }
+    function togglePanel() {
+        const content = document.getElementById('panel-content');
+        content.classList.toggle('hide-panel');
+    }
+
+    function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; }
+    function setMode(mode, sub = '') { currentMode = mode; selectedSub = sub; if(mode!=='route') toggleMenu(); }
 
     function switchPage(id) {
         currentPageId = id;
@@ -169,8 +165,7 @@
     function updateLiveCounter() {
         if (!currentPageId || !pageData[currentPageId]) return;
         const h = pageData[currentPageId].history;
-        let h75m=0, h50m=0, ktm=0, h75L=0, h50L=0, h75T=0, h50T=0, h7550S=0, h7550T=0, r75=0, r50=0;
-        let pS=0, pL=0, pV=0, pU=0, kCount=0;
+        let h75m=0, h50m=0, ktm=0, h75L=0, h50L=0, h75T=0, h50T=0, h7550T=0, r75=0, r50=0, pS=0, pL=0, pV=0, kCount=0;
 
         h.forEach(i => {
             if(i.mode==='route'){
@@ -180,21 +175,17 @@
             } else if(i.mode==='riser'){
                 if(i.size==='75'){ r75+=1; h75L+=1; } else { r50+=1; h50L+=1; }
             } else if(i.mode==='parts'){
-                if(i.sub==='75T') h75T+=1; else if(i.sub==='50T') h50T+=1;
-                else if(i.sub==='75-50S') h7550S+=1; else if(i.sub==='75-50T') h7550T+=1;
+                if(i.sub==='75-50T') h7550T+=1;
             } else if(i.mode==='kigu'){
                 const c = kiguSettings[i.sub];
-                h75m+=c.h75; h50m+=c.h50; ktm+=c.kt;
-                pS+=c.s; pL+=c.l; pV+=c.v; pU+=c.u; r75+=c.r75; r50+=c.r50;
-                if(c.r75>0) h75L+=c.r75; if(c.r50>0) h50L+=c.r50;
-                kCount+=1;
+                h75m+=c.h75; h50m+=c.h50; ktm+=c.kt; pS+=c.s; pL+=c.l; pV+=c.v; r75+=c.r75; r50+=c.r50;
+                if(c.r75>0) h75L+=c.r75; if(c.r50>0) h50L+=c.r50; kCount+=1;
             }
         });
 
-        document.getElementById('cnt-haisui').innerHTML = `排75: ${h75m.toFixed(1)}m / 50: ${h50m.toFixed(1)}m<br>75L: ${h75L} / 50L: ${h50L} / 75T: ${h75T} / 50T: ${h50T}<br><span style="color:#ff9800;">異径75-50S: ${h7550S} / 75-50T: ${h7550T}</span>`;
-        document.getElementById('cnt-kt').innerHTML = `給湯: ${ktm.toFixed(1)}m / 床座S: ${pS} / 座L: ${pL} / 弁: ${pV} / ﾕﾆ: ${pU}`;
+        document.getElementById('cnt-haisui').innerHTML = `排水75: ${h75m.toFixed(1)}m / 50: ${h50m.toFixed(1)}m<br>75L: ${h75L} / 50L: ${h50L} / 異径T: ${h7550T}`;
+        document.getElementById('cnt-kt').innerHTML = `給湯: ${ktm.toFixed(1)}m / 床座S: ${pS} / 座L: ${pL} / 弁: ${pV}`;
         document.getElementById('cnt-support').innerHTML = `支持(75): ${Math.ceil(h75m)+r75} / 支持(50): ${Math.ceil(h50m)+r50} / 支持(給): ${Math.ceil(ktm)+kCount*2}`;
-        document.getElementById('cnt-riser').innerText = r75 + r50;
     }
 
     document.getElementById('file-input').onchange = async (e) => {
@@ -231,7 +222,7 @@
         canvas.onclick=(ev)=>handleDraw(ev.offsetX, ev.offsetY, container);
         container.appendChild(canvas); canvasArea.appendChild(container);
         pageData[id] = { pixelsPerMeter:0, history:[] };
-        const tab = document.createElement('div'); tab.id='tab-'+id; tab.className='tab'; tab.innerText=id;
+        const tab = document.createElement('div'); tab.id='tab-' + id; tab.className='tab'; tab.innerText=id;
         tab.onclick=()=>switchPage(id); topTabs.appendChild(tab);
     }
 
@@ -250,9 +241,9 @@
             p.innerText = selectedSub; container.appendChild(p); data.history.push({mode:'parts', sub:selectedSub, elements:[p]});
         } else if(currentMode==='kigu'){
             const k = document.createElement('div'); k.className='kigu-stamp'; k.style.left=x+'px'; k.style.top=y+'px';
-            k.innerText = selectedSub; container.appendChild(k); data.history.push({mode:'kigu', sub:selectedSub, elements:[k]});
+            k.innerText = kiguSettings[selectedSub].label; container.appendChild(k); data.history.push({mode:'kigu', sub:selectedSub, elements:[k]});
         } else if(currentMode==='route'){
-            if(!data.pixelsPerMeter) return alert("先に尺設定をしてください");
+            if(!data.pixelsPerMeter) return alert("尺設定をしてください");
             if(!firstPoint) firstPoint={x,y};
             else {
                 const dist = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
