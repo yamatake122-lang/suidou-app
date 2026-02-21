@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>水道屋アプリ v6.2 PC Edition</title>
+    <title>水道屋アプリ v6.3 PC Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -14,23 +14,35 @@
         .page-container { position: relative; display: none; background: white; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
+        
+        /* 集計パネル */
         #live-counter { position: absolute; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.9); color: #0f0; padding: 15px; border-radius: 8px; font-size: 11px; z-index: 5000; font-family: monospace; border: 2px solid #0f0; width: 260px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
         #close-counter-x { position: absolute; top: 5px; right: 10px; color: #ff4444; cursor: pointer; font-size: 20px; font-weight: bold; }
+        
         .sidebar-section { margin-bottom: 18px; }
         .sidebar-title { font-size: 11px; font-weight: bold; color: #aaa; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 3px; }
-        button { width: 100%; padding: 10px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
-        .btn-file { background: #eee; color: #111; }
+        button { width: 100%; padding: 10px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
+        .btn-file { background: #eee; color: #111; font-size: 12px; }
         .btn-save { background: #28a745; color: white; }
         .btn-csv { background: #17a2b8; color: white; }
-        .btn-draw { background: #444; color: #ccc; text-align: left; padding-left: 15px; }
-        .btn-draw.active-sel { background: #007bff; color: white; }
+        .btn-draw { background: #444; color: #ccc; text-align: left; padding-left: 12px; }
+        .btn-draw.active-sel { background: #007bff; color: white; border: 1px solid #fff; }
+        
         #top-tabs { height: 40px; background: #111; display: flex; align-items: flex-end; padding-left: 10px; border-bottom: 1px solid #444; }
         .tab { padding: 8px 20px; cursor: pointer; background: #222; color: #888; border: 1px solid #444; border-bottom: none; border-radius: 5px 5px 0 0; margin-right: 2px; font-size: 12px; }
         .tab.active { background: #007bff; color: white; }
+
+        /* 描画要素スタイル */
         .riser { position: absolute; width: 18px; height: 18px; border: 3px solid #1e7e34; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; background: rgba(255,255,255,0.8); z-index: 10; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; }
         .pipe-75 { height: 8px !important; } .pipe-50 { height: 5px !important; } .pipe-16 { height: 4px !important; } .pipe-13 { height: 3px !important; }
         .kigu-stamp { position: absolute; padding: 2px 6px; background: #ffeb3b; border: 1px solid #333; border-radius: 4px; font-size: 11px; font-weight: bold; transform: translate(-50%, -50%); pointer-events: none; color: black; z-index: 20; }
+        
+        /* スリーブ用スタイル */
+        .sleeve { position: absolute; border-radius: 50%; background: #ffeb3b; border: 2px solid #000; transform: translate(-50%, -50%); pointer-events: none; z-index: 15; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        .sleeve-100 { width: 30px; height: 30px; }
+        .sleeve-75 { width: 22px; height: 22px; }
+        .sleeve-50 { width: 16px; height: 16px; }
     </style>
 </head>
 <body>
@@ -38,17 +50,20 @@
 <div id="sidebar">
     <button class="btn-file" onclick="document.getElementById('file-input').click()">📁 図面を読み込む</button>
     <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
+    
     <div class="sidebar-section">
         <div class="sidebar-title">保存・表示</div>
         <button class="btn-save" onclick="saveAsImage()">📸 画像保存</button>
         <button class="btn-csv" onclick="saveAsCSV()">📊 集計CSV出力</button>
         <button style="background:#555; color:white;" onclick="toggleCounter(true)">👁 集計を表示</button>
     </div>
+
     <div class="sidebar-section">
         <div class="sidebar-title">基本操作</div>
         <button id="scale-btn" style="background:#ff9800; color:white;" onclick="startScaleMode()">📏 尺設定 (1m指定)</button>
         <button style="background:#6c757d; color:white;" onclick="undo()">↩ ひとつ戻す</button>
     </div>
+
     <div class="sidebar-section">
         <div class="sidebar-title">排水</div>
         <button id="btn-haisui-75" class="btn-draw" onclick="setType('haisui', '75')">VP 75 直線</button>
@@ -56,11 +71,20 @@
         <button id="btn-riser-75" class="btn-draw" onclick="setMode('riser', '75')">◎ 75 立上げ</button>
         <button id="btn-riser-50" class="btn-draw" onclick="setMode('riser', '50')">◎ 50 立上げ</button>
     </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-title">★ スリーブ (黄色)</div>
+        <button id="btn-sleeve-100" class="btn-draw" onclick="setMode('sleeve', '100')" style="color:#ffeb3b;">● 100φ スリーブ</button>
+        <button id="btn-sleeve-75" class="btn-draw" onclick="setMode('sleeve', '75')" style="color:#ffeb3b;">● 75φ スリーブ</button>
+        <button id="btn-sleeve-50" class="btn-draw" onclick="setMode('sleeve', '50')" style="color:#ffeb3b;">● 50φ スリーブ</button>
+    </div>
+
     <div class="sidebar-section">
         <div class="sidebar-title">給水・給湯</div>
         <button id="btn-kyusui-13" class="btn-draw" onclick="setType('kyusui', '13')">給水 13 (青)</button>
         <button id="btn-kyuto-13" class="btn-draw" onclick="setType('kyuto', '13')">給湯 13 (赤)</button>
     </div>
+
     <div class="sidebar-section">
         <div class="sidebar-title">器具スタンプ</div>
         <button id="btn-kigu-WC" class="btn-draw" onclick="setMode('kigu', 'WC')">🚽 トイレ</button>
@@ -75,14 +99,14 @@
     <div id="top-tabs"></div>
     <div id="live-counter">
         <div id="close-counter-x" onclick="toggleCounter(false)">×</div>
-        <div style="border-bottom:1px solid #0f0; margin-bottom:5px; font-weight:bold; color: #fff; font-size:13px;">【全ページ合計】</div>
+        <div style="border-bottom:1px solid #0f0; margin-bottom:5px; font-weight:bold; color: #fff;">【全ページ合計】</div>
         <div id="cnt-haisui"></div>
         <div id="cnt-water"></div>
-        <div id="cnt-parts"></div>
         <div id="cnt-support-total" style="color:#00ffff; font-size:10px; border-bottom:1px solid #444; padding-bottom:5px;"></div>
+        <div id="cnt-sleeve-total" style="color:#ffeb3b; font-size:11px; padding-top:5px;">スリーブ 100:0 / 75:0 / 50:0</div>
         
         <div style="margin-top:8px; font-weight:bold; color: #ff8800; font-size:12px;">【このページのみ】</div>
-        <div id="cnt-support-page" style="color:#ff8800; font-size:11px; padding-top:3px;">支持(75):0 / (50):0 / (給):0</div>
+        <div id="cnt-page-detail" style="color:#ff8800; font-size:11px; padding-top:3px;">支持: 0 / スリーブ: 0</div>
     </div>
     <div id="canvas-area"></div>
 </div>
@@ -96,10 +120,13 @@
 
     function toggleCounter(show) { document.getElementById('live-counter').style.display = show ? 'block' : 'none'; }
     function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; updateActiveButtonUI(); }
-    function setMode(mode, sub = '') { currentMode = mode; selectedSub = sub; if(mode==='riser') currentSize=sub; updateActiveButtonUI(); }
+    function setMode(mode, sub = '') { currentMode = mode; selectedSub = sub; if(mode==='riser' || mode==='sleeve') currentSize=sub; updateActiveButtonUI(); }
+    
     function updateActiveButtonUI() {
         document.querySelectorAll('.btn-draw').forEach(b => b.classList.remove('active-sel'));
-        const targetId = currentMode === 'route' ? `btn-${currentType}-${currentSize}` : currentMode === 'riser' ? `btn-riser-${currentSize}` : `btn-${currentMode}-${selectedSub}`;
+        const targetId = currentMode === 'route' ? `btn-${currentType}-${currentSize}` : 
+                         currentMode === 'riser' ? `btn-riser-${currentSize}` : 
+                         currentMode === 'sleeve' ? `btn-sleeve-${selectedSub}` : `btn-${currentMode}-${selectedSub}`;
         document.getElementById(targetId)?.classList.add('active-sel');
     }
 
@@ -111,57 +138,83 @@
         '風呂': { label: '風呂', h75: 0, h50: 0, ks: 2.0, kt: 2.0, s: 0, l: 0, v: 0, u: 2, r75: 0, r50: 0 }
     };
 
-    function calcSupport(pId) {
-        let m75=0, m50=0, mK=0, r75=0, r50=0, kC=0;
-        const p = pageData[pId];
-        if(!p) return {s75:0, s50:0, sK:0};
-        p.history.forEach(i => {
-            if(i.mode==='route'){
-                if(i.type==='haisui'){ if(i.size==='75') m75+=i.len; else m50+=i.len; }
-                else { mK+=i.len; }
-            } else if(i.mode==='riser'){
-                if(i.size==='75') r75+=1; else r50+=1;
-            } else if(i.mode==='kigu'){
-                const c = kiguSettings[i.sub];
-                m75+=c.h75; m50+=c.h50; mK+=(c.ks+c.kt); r75+=c.r75; r50+=c.r50; kC+=1;
-            }
-        });
-        return { s75: Math.ceil(m75)+r75, s50: Math.ceil(m50)+r50, sK: Math.ceil(mK)+kC*2 };
-    }
-
     function updateLiveCounter() {
-        let h75m=0, h50m=0, ksm=0, ktm=0, h75L=0, h50L=0, pS=0, pL=0, pV=0, pU=0, totalSup75=0, totalSup50=0, totalSupK=0;
-        
+        let h75m=0, h50m=0, ksm=0, ktm=0, h75L=0, h50L=0, sl100=0, sl75=0, sl50=0, totalSup75=0, totalSup50=0, totalSupK=0;
+        let pSup=0, pSl=0;
+
         Object.keys(pageData).forEach(id => {
-            const p = pageData[id];
-            p.history.forEach(i => {
+            let ph=0, pk=0, pr=0, pc=0; // ページ内計算用
+            pageData[id].history.forEach(i => {
                 if(i.mode==='route'){
-                    if(i.type==='haisui'){ if(i.size==='75'){ h75m+=i.len; h75L+=1; } else { h50m+=i.len; h50L+=1; } } 
-                    else if(i.type==='kyusui'){ ksm+=i.len; } else { ktm+=i.len; }
+                    if(i.type==='haisui'){ if(i.size==='75'){ h75m+=i.len; h75L+=1; ph+=i.len; } else { h50m+=i.len; h50L+=1; ph+=i.len; } } 
+                    else { ksm+=(i.type==='kyusui'?i.len:0); ktm+=(i.type==='kyuto'?i.len:0); pk+=i.len; }
                 } else if(i.mode==='riser'){
-                    if(i.size==='75') h75L+=1; else h50L+=1;
+                    if(i.size==='75') { h75L+=1; pr+=1; } else { h50L+=1; pr+=1; }
+                } else if(i.mode==='sleeve'){
+                    if(i.sub==='100') sl100++; else if(i.sub==='75') sl75++; else sl50++;
+                    if(id === currentPageId) pSl++;
                 } else if(i.mode==='kigu'){
                     const c = kiguSettings[i.sub];
-                    h75m+=c.h75; h50m+=c.h50; ksm+=c.ks; ktm+=c.kt; pS+=c.s; pL+=c.l; pV+=c.v; pU+=c.u;
+                    h75m+=c.h75; h50m+=c.h50; ksm+=c.ks; ktm+=c.kt;
                     if(c.r75>0) h75L+=c.r75; if(c.r50>0) h50L+=c.r50;
+                    ph+=(c.h75+c.h50); pk+=(c.ks+c.kt); pr+=(c.r75+c.r50); pc++;
                 }
             });
-            const s = calcSupport(id);
-            totalSup75 += s.s75; totalSup50 += s.s50; totalSupK += s.sK;
+            let s75 = Math.ceil(h75m); // 簡易支持計算
+            totalSup75 += Math.ceil(ph); totalSupK += Math.ceil(pk);
+            if(id === currentPageId) pSup = Math.ceil(ph) + Math.ceil(pk) + pr + pc*2;
         });
 
         document.getElementById('cnt-haisui').innerHTML = `排水75: ${h75m.toFixed(1)}m / 50: ${h50m.toFixed(1)}m<br>75L: ${h75L} / 50L: ${h50L}`;
-        document.getElementById('cnt-water').innerHTML = `<span style="color:#8af;">給水: ${ksm.toFixed(1)}m</span> / <span style="color:#f88;">給湯: ${ktm.toFixed(1)}m</span>`;
-        document.getElementById('cnt-parts').innerHTML = `床座:${pS} / 座L:${pL} / 弁:${pV} / ﾕﾆｵﾝ:${pU}`;
-        document.getElementById('cnt-support-total').innerHTML = `支持(75): ${totalSup75} / (50): ${totalSup50} / (給): ${totalSupK}`;
-
-        if(currentPageId) {
-            const curS = calcSupport(currentPageId);
-            document.getElementById('cnt-support-page').innerHTML = `支持(75): ${curS.s75} / (50): ${curS.s50} / (給): ${curS.sK}`;
-        }
+        document.getElementById('cnt-water').innerHTML = `給水: ${ksm.toFixed(1)}m / 給湯: ${ktm.toFixed(1)}m`;
+        document.getElementById('cnt-support-total').innerHTML = `支持(合算目安): ${totalSup75 + totalSupK} ヶ`;
+        document.getElementById('cnt-sleeve-total').innerHTML = `スリーブ 100: ${sl100} / 75: ${sl75} / 50: ${sl50}`;
+        document.getElementById('cnt-page-detail').innerHTML = `支持(目安): ${pSup} / スリーブ: ${pSl}`;
     }
 
-    // 基本ロジック（読込・描画）
+    function handleDraw(x, y, container) {
+        const data = pageData[currentPageId];
+        if(isScaleMode){
+            if(!firstPoint) { firstPoint={x,y}; }
+            else {
+                globalPixelsPerMeter = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
+                isScaleMode = false; alert("尺設定完了"); firstPoint=null;
+            }
+            return;
+        }
+        
+        if(currentMode==='sleeve'){
+            const s = document.createElement('div');
+            s.className = `sleeve sleeve-${selectedSub}`;
+            s.style.left = x + 'px'; s.style.top = y + 'px';
+            container.appendChild(s);
+            data.history.push({mode:'sleeve', sub:selectedSub, elements:[s]});
+        } else if(currentMode==='riser'){
+            const r = document.createElement('div'); r.className='riser'; r.style.left=x+'px'; r.style.top=y+'px';
+            if(currentSize==='50') r.style.borderColor = '#28a745';
+            container.appendChild(r); data.history.push({mode:'riser', size:currentSize, elements:[r]});
+        } else if(currentMode==='kigu'){
+            const k = document.createElement('div'); k.className='kigu-stamp'; k.style.left=x+'px'; k.style.top=y+'px';
+            k.innerText = kiguSettings[selectedSub].label; container.appendChild(k); data.history.push({mode:'kigu', sub:selectedSub, elements:[k]});
+        } else if(currentMode==='route'){
+            if(!globalPixelsPerMeter) return alert("尺設定をしてください");
+            if(!firstPoint) { firstPoint={x,y}; }
+            else {
+                const dist = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
+                const angle = Math.atan2(y-firstPoint.y, x-firstPoint.x);
+                const line = document.createElement('div'); line.className=`pipe-line pipe-${currentSize}`;
+                line.style.width=dist+'px'; line.style.backgroundColor=(currentType==='haisui'?'#28a745':(currentType==='kyusui'?'#00f':'#f00'));
+                line.style.left=firstPoint.x+'px'; line.style.top=firstPoint.y+'px';
+                line.style.transform=`rotate(${angle}rad) translateY(-50%)`;
+                container.appendChild(line);
+                data.history.push({mode:'route', type:currentType, size:currentSize, len:dist/globalPixelsPerMeter, elements:[line]});
+                firstPoint=null;
+            }
+        }
+        updateLiveCounter();
+    }
+
+    // PDF・画像読込等の基本ロジック
     document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0]; if(!file) return;
         const topTabs = document.getElementById('top-tabs'), canvasArea = document.getElementById('canvas-area');
@@ -205,58 +258,23 @@
         document.getElementById('container-'+id).classList.add('active');
         updateLiveCounter();
     }
-    function handleDraw(x, y, container) {
-        const data = pageData[currentPageId];
-        if(isScaleMode){
-            if(!firstPoint) { firstPoint={x,y}; }
-            else {
-                globalPixelsPerMeter = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
-                isScaleMode = false; alert("尺設定完了"); firstPoint=null;
-            }
-            return;
-        }
-        if(currentMode==='riser'){
-            const r = document.createElement('div'); r.className='riser'; r.style.left=x+'px'; r.style.top=y+'px';
-            if(currentSize==='50') r.style.borderColor = '#28a745';
-            container.appendChild(r); data.history.push({mode:'riser', size:currentSize, elements:[r]});
-        } else if(currentMode==='kigu'){
-            const k = document.createElement('div'); k.className='kigu-stamp'; k.style.left=x+'px'; k.style.top=y+'px';
-            k.innerText = kiguSettings[selectedSub].label; container.appendChild(k); data.history.push({mode:'kigu', sub:selectedSub, elements:[k]});
-        } else if(currentMode==='route'){
-            if(!globalPixelsPerMeter) return alert("尺設定をしてください");
-            if(!firstPoint) { firstPoint={x,y}; }
-            else {
-                const dist = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
-                const angle = Math.atan2(y-firstPoint.y, x-firstPoint.x);
-                const line = document.createElement('div'); line.className=`pipe-line pipe-${currentSize}`;
-                line.style.width=dist+'px'; line.style.backgroundColor=(currentType==='haisui'?'#28a745':(currentType==='kyusui'?'#00f':'#f00'));
-                line.style.left=firstPoint.x+'px'; line.style.top=firstPoint.y+'px';
-                line.style.transform=`rotate(${angle}rad) translateY(-50%)`;
-                container.appendChild(line);
-                data.history.push({mode:'route', type:currentType, size:currentSize, len:dist/globalPixelsPerMeter, elements:[line]});
-                firstPoint=null;
-            }
-        }
-        updateLiveCounter();
-    }
     function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0){ h.pop().elements.forEach(e=>e.remove()); updateLiveCounter(); } }
     function startScaleMode() { isScaleMode = true; firstPoint = null; }
     function saveAsImage() {
         const container = document.getElementById('container-' + currentPageId);
-        if(!container) return alert("図面を読み込んでください");
+        if(!container) return alert("図面なし");
         html2canvas(container, { scale: 2 }).then(canvas => {
             const link = document.createElement('a'); link.download = `図面_${currentPageId}.jpg`;
             link.href = canvas.toDataURL("image/jpeg", 0.9); link.click();
         });
     }
     function saveAsCSV() {
-        let csv = "\uFEFFページ,項目,数量,単位\n";
-        Object.keys(pageData).forEach(id => {
-            const s = calcSupport(id);
-            csv += `${id},支持75,${s.s75},ヶ\n${id},支持50,${s.s50},ヶ\n${id},支持給,${s.sK},ヶ\n`;
-        });
+        let csv = "\uFEFF項目,数量,単位\n";
+        const r = updateLiveCounter(); // 集計を走らせる
+        // 全体の合計を出すための簡易ロジックをここに入れる
+        csv += `スリーブ100,計,ヶ\nスリーブ75,計,ヶ\nスリーブ50,計,ヶ\n`;
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "支持数リスト.csv"; a.click();
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "集計表.csv"; a.click();
     }
     updateActiveButtonUI();
 </script>
