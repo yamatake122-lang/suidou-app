@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水道屋アプリ v4.9</title>
+    <title>水道屋アプリ v5.0</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; overflow: hidden; background: #1a1a1a; height: 100vh; color: white; }
         
         /* 上部バー */
-        #top-bar { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 2000; background: #000; height: 45px; align-items: center; padding: 0 10px; border-bottom: 1px solid #333; gap: 5px; }
+        #top-bar { position: fixed; top: 0; left: 0; right: 0; display: flex; z-index: 2000; background: #000; height: 45px; align-items: center; padding: 0 10px; border-bottom: 1px solid #333; gap: 8px; }
         #file-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
         #top-tabs { display: flex; overflow-x: auto; flex-grow: 1; scrollbar-width: none; }
         .tab { padding: 10px 15px; cursor: pointer; font-size: 12px; border-bottom: 3px solid transparent; white-space: nowrap; color: #aaa; }
         .tab.active { border-bottom: 3px solid #007bff; background: #222; color: white; }
         #quick-undo { background: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; flex-shrink: 0; }
         #scale-btn { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+        #scale-btn.active-scale { background: #ffeb3b; color: #000; outline: 2px solid white; }
 
         /* 集計パネル */
         #live-counter {
@@ -40,21 +41,19 @@
         #menu-handle { width: 100%; height: 25px; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 20px; margin-bottom: 5px; cursor: move; }
         #menu-handle::after { content: "⠿"; }
 
-        /* フローティングボタン */
         #floating-toggle {
             position: fixed; bottom: 25px; right: 20px; width: 60px; height: 60px;
             background: #ff9800; color: white; border-radius: 50%; border: 4px solid white;
             font-size: 24px; z-index: 3000; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
         }
 
-        /* 描画エリア */
         #canvas-area { width: 100vw; height: 100vh; overflow: auto; background: #333; padding-top: 45px; }
         .page-container { position: relative; display: none; }
         .page-container.active { display: block; }
         canvas { display: block; background: white; cursor: crosshair; }
-        .active-sel { outline: 4px solid #ff9800 !important; outline-offset: -2px; }
+        .active-sel { outline: 3px solid #007bff !important; }
 
-        /* 配管・スタンプ（前回同様の配色） */
+        /* パーツ配色 */
         .riser { position: absolute; width: 20px; height: 20px; border: 3px solid #1e7e34; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; background: rgba(255,255,255,0.8); z-index: 10; }
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.7; z-index: 5; }
         .pipe-75 { height: 10px !important; } .pipe-50 { height: 6px !important; } .pipe-16 { height: 4px !important; } .pipe-13 { height: 3px !important; }
@@ -74,7 +73,7 @@
     <button id="file-btn" onclick="document.getElementById('file-input').click()">📁 読込</button>
     <div id="top-tabs"></div>
     <button id="quick-undo" onclick="undo()">↩ 戻る</button>
-    <button id="scale-btn" onclick="setMode('scale')">📏 尺設定</button>
+    <button id="scale-btn" onclick="startScaleMode()">📏 尺設定</button>
 </div>
 <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
 
@@ -134,28 +133,25 @@
 
     let currentPageId = null, pageData = {}, globalPixelsPerMeter = 0;
     let currentType = 'haisui', currentSize = '75', currentMode = 'route', selectedSub = '', firstPoint = null;
-    let menuClosedThisAction = false; // メニューを閉じた直後の誤描画防止
+    let ignoreNextClick = false;
 
-    // --- メニュードラッグ機能 ---
+    // --- ドラッグ機能 ---
     const menu = document.getElementById('mini-menu');
     let isDragging = false, startX, startY, initialX, initialY;
 
     const startDrag = (e) => {
         if (e.target.tagName === 'BUTTON' || e.target.id === 'menu-close-x') return;
         isDragging = true;
-        const clientX = e.clientX || e.touches[0].clientX;
-        const clientY = e.clientY || e.touches[0].clientY;
-        startX = clientX; startY = clientY;
-        initialX = menu.offsetLeft; initialY = menu.offsetTop;
-        if (e.type === 'touchstart') e.stopPropagation();
+        const cX = e.clientX || e.touches[0].clientX;
+        const cY = e.clientY || e.touches[0].clientY;
+        startX = cX; startY = cY; initialX = menu.offsetLeft; initialY = menu.offsetTop;
     };
     const moveDrag = (e) => {
         if (!isDragging) return;
-        const clientX = e.clientX || (e.touches ? e.touches[0].clientX : null);
-        const clientY = e.clientY || (e.touches ? e.touches[0].clientY : null);
-        if (clientX === null) return;
-        menu.style.left = (initialX + (clientX - startX)) + 'px';
-        menu.style.top = (initialY + (clientY - startY)) + 'px';
+        const cX = e.clientX || (e.touches ? e.touches[0].clientX : null);
+        const cY = e.clientY || (e.touches ? e.touches[0].clientY : null);
+        menu.style.left = (initialX + (cX - startX)) + 'px';
+        menu.style.top = (initialY + (cY - startY)) + 'px';
         e.preventDefault();
     };
     const endDrag = () => { isDragging = false; };
@@ -167,28 +163,33 @@
     window.addEventListener('mouseup', endDrag);
     window.addEventListener('touchend', endDrag);
 
-    // --- 各種ロジック ---
+    // --- 尺設定モード ---
+    function startScaleMode() {
+        currentMode = 'scale';
+        firstPoint = null;
+        if (menu.style.display === 'block') menu.style.display = 'none';
+        document.getElementById('scale-btn').classList.add('active-scale');
+        alert("図面上の1メートルの区間（2点）をクリックしてください。");
+    }
+
+    // --- 各種ボタン操作 ---
     function updateActiveButtonUI() {
-        document.querySelectorAll('.cmd-btn, #scale-btn').forEach(b => b.classList.remove('active-sel'));
+        document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active-sel'));
+        document.getElementById('scale-btn').classList.remove('active-scale');
         if(currentMode === 'route') {
             document.getElementById(`btn-${currentType}-${currentSize}`)?.classList.add('active-sel');
-            document.getElementById('btn-mode-route').classList.add('active-sel');
-        } else if(currentMode === 'riser') {
-            document.getElementById(`btn-riser-${selectedSub}`)?.classList.add('active-sel');
-        } else if(currentMode === 'parts') {
-            document.getElementById(`btn-parts-${selectedSub}`)?.classList.add('active-sel');
-        } else if(currentMode === 'kigu') {
-            document.getElementById(`btn-kigu-${selectedSub}`)?.classList.add('active-sel');
+            document.getElementById('btn-mode-route')?.classList.add('active-sel');
         } else if(currentMode === 'scale') {
-            document.getElementById('scale-btn').classList.add('active-sel');
+            document.getElementById('scale-btn').classList.add('active-scale');
+        } else {
+            document.getElementById(`btn-${currentMode}-${selectedSub}`)?.classList.add('active-sel');
         }
     }
 
     function toggleMenu() {
         if (menu.style.display === 'block') {
             menu.style.display = 'none';
-            menuClosedThisAction = true; // 閉じたフラグを立てる
-            setTimeout(() => { menuClosedThisAction = false; }, 300);
+            ignoreNextClick = true; setTimeout(() => { ignoreNextClick = false; }, 200);
         } else {
             menu.style.display = 'block';
             updateActiveButtonUI();
@@ -199,7 +200,7 @@
     function setType(type, size) { currentType = type; currentSize = size; currentMode = 'route'; updateActiveButtonUI(); }
     function setMode(mode, sub = '') { 
         currentMode = mode; selectedSub = sub; updateActiveButtonUI(); 
-        if(mode !== 'route') toggleMenu();
+        if(mode !== 'route') { menu.style.display = 'none'; ignoreNextClick = true; setTimeout(() => { ignoreNextClick = false; }, 200); }
     }
 
     // --- 集計ロジック ---
@@ -232,7 +233,7 @@
         document.getElementById('cnt-support').innerHTML = `支持(75): ${Math.ceil(h75m)+r75} / 支持(50): ${Math.ceil(h50m)+r50} / 支持(給): ${Math.ceil(ktm)+kCount*2}`;
     }
 
-    // --- ファイル・ページ管理 ---
+    // --- ファイル・ページ ---
     document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0]; if(!file) return;
         const topTabs = document.getElementById('top-tabs'), canvasArea = document.getElementById('canvas-area');
@@ -264,7 +265,7 @@
         const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
         const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
         canvas.addEventListener('mousedown', (ev) => {
-            if(menu.style.display==='block' || menuClosedThisAction) return;
+            if(menu.style.display==='block' || ignoreNextClick) return;
             handleDraw(ev.offsetX, ev.offsetY, container);
         });
         container.appendChild(canvas); canvasArea.appendChild(container);
@@ -285,8 +286,13 @@
     function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
         if(currentMode==='scale'){
-            if(!firstPoint) firstPoint={x,y};
-            else { globalPixelsPerMeter = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2); alert("尺設定完了"); firstPoint=null; }
+            if(!firstPoint) { firstPoint={x,y}; }
+            else {
+                globalPixelsPerMeter = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
+                document.getElementById('scale-btn').classList.remove('active-scale');
+                currentMode = 'route'; updateActiveButtonUI();
+                alert("尺設定が完了しました（1メートルを記録）"); firstPoint=null;
+            }
         } else if(currentMode==='riser'){
             const r = document.createElement('div'); r.className='riser'; r.style.left=x+'px'; r.style.top=y+'px';
             if(currentSize==='50') r.style.borderColor = '#28a745';
@@ -298,7 +304,7 @@
             const k = document.createElement('div'); k.className='kigu-stamp'; k.style.left=x+'px'; k.style.top=y+'px';
             k.innerText = kiguSettings[selectedSub].label; container.appendChild(k); data.history.push({mode:'kigu', sub:selectedSub, elements:[k]});
         } else if(currentMode==='route'){
-            if(!globalPixelsPerMeter) return alert("尺設定をしてください");
+            if(!globalPixelsPerMeter) return alert("最初に「尺設定」をしてください");
             if(!firstPoint) { firstPoint={x,y}; }
             else {
                 const dist = Math.sqrt((x-firstPoint.x)**2+(y-firstPoint.y)**2);
