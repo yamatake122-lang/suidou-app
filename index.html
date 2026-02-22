@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v9.0 Pro</title>
+    <title>設備拾い出しツール v9.1 Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -15,18 +15,15 @@
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* 詳細カウンターパネル */
-        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.9); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 150px; line-height: 1.6; }
+        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.9); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 150px; line-height: 1.6; pointer-events: none; }
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; margin-bottom: 4px; }
         .cnt-val { font-weight: bold; color: #0f0; }
 
-        /* マスデザイン */
         .mass-base { position: absolute; width: 26px; height: 26px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; }
         .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; }
         .mass-start::before { content: ""; position: absolute; top: 2px; left: 50%; width: 12px; height: 12px; border: 1.5px solid #333; border-radius: 50%; transform: translateX(-50%); }
         .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; }
 
-        /* 配管ライン */
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; }
         .pipe-vu100 { height: 10px; background: #28a745; }
         .pipe-vu75  { height: 6px; background: #28a745; }
@@ -39,7 +36,8 @@
         .sidebar-title { font-size: 11px; font-weight: bold; color: #888; margin-bottom: 5px; border-bottom: 1px solid #444; }
         button { width: 100%; padding: 8px; margin-bottom: 3px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; text-align: left; background: #444; color: #ccc; }
         button.active-sel { background: #007bff; color: white; border: 1px solid #fff; }
-        input[type="number"] { width: 100%; background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; font-size: 12px; margin-top: 5px; }
+        .btn-calib { background: #673ab7; color: white; text-align: center; margin-bottom: 10px; }
+        input[type="number"] { width: 100%; background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -58,8 +56,10 @@
     <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
     
     <div class="sidebar-section">
-        <div class="sidebar-title">尺設定 (1mあたりのピクセル数)</div>
-        <input type="number" id="scale-px" value="100" onchange="updateCounters()">
+        <div class="sidebar-title">📏 尺設定 (スケール合わせ)</div>
+        <button id="btn-mode-calib" class="btn-calib" onclick="setMode('calib')">🎯 図面上で1mを決める</button>
+        <div style="font-size:10px; color:#aaa; margin-bottom:5px;">現在の1m = <span id="display-px">100</span> px</div>
+        <input type="number" id="scale-px" value="100" onchange="updateCounters()" style="display:none;">
     </div>
 
     <div class="sidebar-section">
@@ -102,9 +102,16 @@
     let currentPageId = null, pageData = {};
     let currentPipe = 'vu100', currentMode = 'mass', massType = 'round', currentRot = 0;
     let manualStart = null, isDrawing = false, currentPath = null;
+    let calibStart = null;
 
     function setPipe(p) { currentPipe = p; updateUI(); }
-    function setMode(m) { currentMode = m; manualStart = null; updateUI(); }
+    function setMode(m) { 
+        currentMode = m; 
+        manualStart = null; 
+        calibStart = null;
+        if(m === 'calib') alert("図面上の『1m』に相当する2点（始点と終点）をクリックしてください。");
+        updateUI(); 
+    }
     function setMassType(t) { massType = t; currentMode = 'mass'; updateUI(); }
 
     function updateUI() {
@@ -112,6 +119,8 @@
         document.getElementById('pipe-'+currentPipe)?.classList.add('active-sel');
         document.getElementById('mode-'+currentMode)?.classList.add('active-sel');
         document.getElementById('mtype-'+massType)?.classList.add('active-sel');
+        if(currentMode === 'calib') document.getElementById('btn-mode-calib').classList.add('active-sel');
+        document.getElementById('display-px').innerText = Math.round(document.getElementById('scale-px').value);
     }
 
     function updateCounters() {
@@ -131,10 +140,26 @@
             document.getElementById(`len-${type}`).innerText = (stats[type].len / pxPerM).toFixed(1);
             document.getElementById(`qty-${type}`).innerText = stats[type].qty;
         }
+        document.getElementById('display-px').innerText = Math.round(pxPerM);
     }
 
     function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
+        
+        if(currentMode === 'calib') {
+            if(!calibStart) {
+                calibStart = {x, y};
+            } else {
+                const dist = Math.sqrt((x - calibStart.x)**2 + (y - calibStart.y)**2);
+                document.getElementById('scale-px').value = dist;
+                alert("設定完了：1.0m = " + Math.round(dist) + "px に設定しました。");
+                calibStart = null;
+                setMode('mass');
+                updateCounters();
+            }
+            return;
+        }
+
         if(currentMode === 'mass') {
             const num = data.history.filter(i => i.isMass).length + 1;
             const m = document.createElement('div');
@@ -196,7 +221,8 @@
             if(currentMode === 'pen') {
                 isDrawing = true;
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("stroke", currentPipe==='supply'?'#007bff':currentPipe==='hot'?'#ff4757':'#28a745');
+                const color = currentPipe==='supply'?'#007bff':currentPipe==='hot'?'#ff4757':'#28a745';
+                path.setAttribute("stroke", color);
                 path.setAttribute("stroke-width", "3"); path.setAttribute("fill", "none");
                 path.setAttribute("d", `M ${ev.offsetX} ${ev.offsetY}`);
                 svg.appendChild(path); currentPath = path;
