@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.18 (Auto-Connect Logic Restored)</title>
+    <title>設備拾い出しツール v10.19 (Single Pipe Mode)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -199,17 +199,13 @@
         return target ? {x: target.pos.x, y: target.pos.y} : {x, y};
     }
 
-    // ★重要: 自動配管接続ボタンの処理
     function autoConnectPipes() {
         if (!currentPageId) return;
         const container = document.getElementById('container-' + currentPageId);
         const masses = pageData[currentPageId].history.filter(h => h.isMass);
         if (masses.length < 2) { alert("マスを2つ以上配置してください。"); return; }
-
         for (let i = 0; i < masses.length - 1; i++) {
-            const m1 = masses[i].pos;
-            const m2 = masses[i+1].pos;
-            createLine(m1.x, m1.y, m2.x, m2.y, container, currentPipe);
+            createLine(masses[i].pos.x, masses[i].pos.y, masses[i+1].pos.x, masses[i+1].pos.y, container, currentPipe);
         }
         updateCounters();
     }
@@ -239,6 +235,7 @@
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
             data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m]});
         } else if(currentMode === 'manual') {
+            // ★修正ポイント: 始点と終点で完結させるロジック
             if(!manualStart) {
                 manualStart = snapped;
                 const preview = document.getElementById('line-preview');
@@ -246,7 +243,9 @@
                 preview.className = `pipe-line pipe-${currentPipe}`;
             } else {
                 createLine(manualStart.x, manualStart.y, snapped.x, snapped.y, container, currentPipe);
-                manualStart = snapped;
+                // 描画後、リセットすることで連続しないようにする
+                manualStart = null; 
+                document.getElementById('line-preview').style.display = 'none';
             }
         }
         updateCounters();
@@ -303,10 +302,8 @@
                 currentPath.setAttribute("stroke-width", activePen.width); currentPath.setAttribute("stroke-linecap", "round");
                 currentPath.setAttribute("stroke-linejoin", "round");
                 currentPath.setAttribute("d", `M ${ev.offsetX} ${ev.offsetY}`);
-                
                 currentPath.onmouseenter = (e) => { if(isMouseDown && currentTool === 'eraser') e.target.remove(); };
                 currentPath.onmousedown = (e) => { if(currentTool === 'eraser') { e.stopPropagation(); e.target.remove(); } };
-
                 svg.appendChild(currentPath);
                 pageData[id].history.push({elements:[currentPath]});
             } else {
