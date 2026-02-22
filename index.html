@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.15 (All-Tools Fixed)</title>
+    <title>設備拾い出しツール v10.16 (Snap & Auto-Draw Fixed)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -18,7 +18,6 @@
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* 手書きSVGレイヤー */
         .drawing-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
         .drawing-svg path { pointer-events: stroke; cursor: pointer; }
         
@@ -30,7 +29,6 @@
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
         .cnt-val { font-weight: bold; color: #0f0; }
 
-        /* マス・器具 */
         .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; }
         .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
         .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border: 1px solid white; z-index: 30; }
@@ -204,14 +202,17 @@
         if(currentMode === 'mass') document.getElementById('mtype-'+massType)?.classList.add('active-sel');
     }
 
+    // ★重要: 吸着ロジック
     function getSnappedPos(x, y) {
         if (!currentPageId) return {x, y};
+        // 既存の「マス」の中から、クリック位置に近いものを探す (半径20px以内)
         const target = pageData[currentPageId].history.find(h => h.isMass && Math.sqrt((h.pos.x - x)**2 + (h.pos.y - y)**2) < 20);
         return target ? {x: target.pos.x, y: target.pos.y} : {x, y};
     }
 
     function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
+        // クリック位置をマスに吸着させる
         const snapped = getSnappedPos(x, y);
 
         if(currentMode === 'calib') {
@@ -233,6 +234,7 @@
             const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
             label.style.transform = `rotate(-${currentRot}deg)`;
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
+            // 位置情報を履歴に保存（スナップ用）
             data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m]});
         } else if(currentMode === 'manual') {
             if(!manualStart) {
@@ -242,8 +244,12 @@
                 preview.className = `pipe-line pipe-${currentPipe}`;
             } else {
                 createLine(manualStart.x, manualStart.y, snapped.x, snapped.y, container, currentPipe);
-                manualStart = null;
-                document.getElementById('line-preview').style.display = 'none';
+                // ★次への連続描画のため、今回の終点を次の起点にする
+                manualStart = snapped; 
+                // プレビューの起点も更新
+                const preview = document.getElementById('line-preview');
+                preview.style.left = manualStart.x + 'px';
+                preview.style.top = manualStart.y + 'px';
             }
         }
         updateCounters();
@@ -254,14 +260,18 @@
             const container = document.getElementById('container-' + currentPageId);
             if (!container) return;
             const rect = container.getBoundingClientRect();
+            // スクロールとコンテナ位置を考慮した座標算出
             const x = e.clientX - rect.left + container.scrollLeft;
             const y = e.clientY - rect.top + container.scrollTop;
             const snapped = getSnappedPos(x, y);
+            
             const preview = document.getElementById('line-preview');
             const dist = Math.sqrt((snapped.x - manualStart.x)**2 + (snapped.y - manualStart.y)**2);
+            
+            // プレビュー表示（座標計算の修正）
             preview.style.width = dist + 'px';
-            preview.style.left = (manualStart.x + rect.left - container.scrollLeft) + 'px';
-            preview.style.top = (manualStart.y + rect.top - container.scrollTop) + 'px';
+            preview.style.left = manualStart.x + 'px'; 
+            preview.style.top = manualStart.y + 'px';
             preview.style.transform = `rotate(${Math.atan2(snapped.y - manualStart.y, snapped.x - manualStart.x)}rad) translateY(-50%)`;
         }
         if (isMouseDown && currentPath && currentMode === 'pen' && currentTool === 'pen') {
@@ -274,6 +284,15 @@
     });
 
     window.addEventListener('mouseup', () => { isMouseDown = false; currentPath = null; });
+    
+    // ダブルクリックか右クリックで直線描画を終了する
+    window.addEventListener('contextmenu', (e) => {
+        if(currentMode === 'manual' && manualStart) {
+            e.preventDefault();
+            manualStart = null;
+            document.getElementById('line-preview').style.display = 'none';
+        }
+    });
 
     function createLine(x1, y1, x2, y2, container, type) {
         const dist = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
