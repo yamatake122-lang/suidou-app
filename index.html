@@ -2,22 +2,24 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v8.8 Pro</title>
+    <title>設備拾い出しツール v8.9 Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         :root { --sidebar-width: 280px; }
         body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
-        #sidebar { width: var(--sidebar-width); background: #252525; border-right: 2px solid #444; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; }
+        #sidebar { width: var(--sidebar-width); background: #252525; border-right: 2px solid #444; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
         #main-content { flex: 1; display: flex; flex-direction: column; background: #333; position: relative; overflow: hidden; }
         #canvas-area { flex: 1; overflow: auto; padding: 20px; display: flex; align-items: flex-start; justify-content: center; }
         .page-container { position: relative; display: none; background: white; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
+        /* カウンター表示 */
+        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); border: 1px solid #0f0; color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 2000; pointer-events: none; }
+        
         /* マス・配管デザイン */
         .mass-base { position: absolute; width: 30px; height: 30px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; }
-        .mass-branch::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(90deg, #ccc 50%, transparent 50%); opacity: 0.5; }
         .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; }
         .mass-start::before { content: ""; position: absolute; top: 2px; left: 50%; width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 50%; transform: translateX(-50%); }
         .mass-num-label { position: absolute; top: -15px; right: -15px; background: #e91e63; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; text-align: center; line-height: 18px; font-weight: bold; border: 1px solid white; z-index: 30; }
@@ -27,7 +29,7 @@
         .pipe-vu75  { height: 6px; background-color: #28a745; }
         .pipe-supply { height: 4px; background-color: #007bff; }
         .pipe-hot    { height: 4px; background-color: #ff4757; }
-        .drawing-layer { position: absolute; top: 0; left: 0; z-index: 100; pointer-events: none; }
+        .drawing-layer { position: absolute; top: 0; left: 0; z-index: 100; pointer-events: none; width: 100%; height: 100%; }
 
         .sidebar-section { margin-bottom: 15px; }
         .sidebar-title { font-size: 11px; font-weight: bold; color: #888; margin-bottom: 5px; border-bottom: 1px solid #444; }
@@ -41,6 +43,11 @@
     </style>
 </head>
 <body>
+
+<div id="counter-panel">
+    <div>配管合計: <span id="total-len">0.00</span> m</div>
+    <div>マス/継手: <span id="total-mass">0</span> ヶ</div>
+</div>
 
 <div id="sidebar">
     <button style="background:#eee;color:#111;text-align:center" onclick="document.getElementById('file-input').click()">📁 図面読み込み</button>
@@ -57,7 +64,7 @@
     <div class="sidebar-section">
         <div class="sidebar-title">モード切替</div>
         <button id="mode-mass" class="btn-mode active-sel" onclick="setMode('mass')">⦿ マス配置 (Rで回転)</button>
-        <button id="mode-manual" class="btn-mode" onclick="setMode('manual')">📏 手動配管 (2点間)</button>
+        <button id="mode-manual" class="btn-mode" onclick="setMode('manual')">📏 手動配管</button>
         <button id="mode-pen" class="btn-mode" onclick="setMode('pen')">🖊 自由手書き</button>
         <button id="mode-eraser" class="btn-mode" onclick="setMode('eraser')">🧽 消しゴム</button>
     </div>
@@ -66,11 +73,11 @@
         <div class="sidebar-title">マス種別</div>
         <button id="mtype-round" class="btn-mtype active-sel" onclick="setMassType('round')">○ 中間マス</button>
         <button id="mtype-branch" class="btn-mtype" onclick="setMassType('branch')">◑ 分岐マス</button>
-        <button id="mtype-start" class="btn-mtype" onclick="setMassType('start')">⦿ 起点マス (終点)</button>
+        <button id="mtype-start" class="btn-mtype" onclick="setMassType('start')">⦿ 起点マス</button>
     </div>
 
     <div class="sidebar-section">
-        <button class="btn-special" onclick="connectMasses()">⚡ 自動接続 (起点で停止)</button>
+        <button class="btn-special" onclick="connectMasses()">⚡ 自動接続</button>
     </div>
 
     <div class="sidebar-section">
@@ -103,7 +110,20 @@
         document.getElementById('mtype-'+massType)?.classList.add('active-sel');
     }
 
-    function handleDraw(x, y, container, ev) {
+    function updateCounters() {
+        let totalLen = 0;
+        let totalMass = 0;
+        Object.values(pageData).forEach(data => {
+            data.history.forEach(h => {
+                if(h.isMass) totalMass++;
+                if(h.len) totalLen += h.len;
+            });
+        });
+        document.getElementById('total-len').innerText = (totalLen / 100).toFixed(2); // 100px = 1m
+        document.getElementById('total-mass').innerText = totalMass;
+    }
+
+    function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
         if(currentMode === 'mass') {
             const num = data.history.filter(i => i.isMass).length + 1;
@@ -120,6 +140,7 @@
             if(!manualStart) manualStart = {x, y};
             else { createLine(manualStart.x, manualStart.y, x, y, container, currentPipe); manualStart = null; }
         }
+        updateCounters();
     }
 
     function connectMasses() {
@@ -129,22 +150,19 @@
         const massItems = data.history.filter(item => item.isMass);
         if (massItems.length < 2) return;
 
-        // 本管接続：起点(start)が出てきたらそこで止まる
         for (let i = 0; i < massItems.length - 1; i++) {
-            const s = massItems[i];
-            const e = massItems[i+1];
+            const s = massItems[i]; const e = massItems[i+1];
             createLine(s.pos.x, s.pos.y, e.pos.x, s.pos.y, container, currentPipe);
             createLine(e.pos.x, s.pos.y, e.pos.x, e.pos.y, container, currentPipe);
-            if (e.mode === 'start') break; // 起点に到達したら以降は繋がない
+            if (e.mode === 'start') break;
         }
-
-        // 分岐接続：枝の生成
         massItems.forEach(item => {
             if (item.mode === 'branch') {
                 const rad = (item.rot * Math.PI) / 180;
                 createLine(item.pos.x, item.pos.y, item.pos.x + 50 * Math.cos(rad), item.pos.y + 50 * Math.sin(rad), container, currentPipe);
             }
         });
+        updateCounters();
     }
 
     function createLine(x1, y1, x2, y2, container, type) {
@@ -152,18 +170,17 @@
         if (dist < 2) return;
         const line = document.createElement('div');
         line.className = `pipe-line pipe-${type}`;
-        line.style.width = dist + 'px';
-        line.style.left = x1 + 'px'; line.style.top = y1 + 'px';
+        line.style.width = dist + 'px'; line.style.left = x1 + 'px'; line.style.top = y1 + 'px';
         line.style.transform = `rotate(${Math.atan2(y2-y1, x2-x1)}rad) translateY(-50%)`;
         container.appendChild(line);
-        pageData[currentPageId].history.push({isMass:false, elements:[line]});
+        pageData[currentPageId].history.push({isMass:false, elements:[line], len: dist});
     }
 
     function createPageUI(id, topTabs, canvasArea) {
         const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
         const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "drawing-layer"); svg.setAttribute("width", "4000"); svg.setAttribute("height", "4000");
+        svg.setAttribute("class", "drawing-layer");
         
         canvas.addEventListener('mousedown', (ev) => {
             if(currentMode === 'pen') {
@@ -174,15 +191,23 @@
                 path.setAttribute("d", `M ${ev.offsetX} ${ev.offsetY}`);
                 svg.appendChild(path); currentPath = path;
                 pageData[id].history.push({isMass:false, elements:[path]});
-            } else { handleDraw(ev.offsetX, ev.offsetY, container, ev); }
+            } else if(currentMode === 'eraser') {
+              // 消しゴムロジックは簡易的に最後の要素を消すか検討
+            } else { handleDraw(ev.offsetX, ev.offsetY, container); }
         });
+
+        // 誤描画を防ぐため、canvasではなくwindowでmouseupを監視
         window.addEventListener('mousemove', (ev) => {
-            if(isDrawing && currentPath) {
-                const rect = canvas.getBoundingClientRect();
-                currentPath.setAttribute("d", `${currentPath.getAttribute("d")} L ${ev.clientX - rect.left} ${ev.clientY - rect.top}`);
-            }
+            if(!isDrawing || currentMode !== 'pen' || !currentPath) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = ev.clientX - rect.left;
+            const y = ev.clientY - rect.top;
+            if(x < 0 || x > canvas.width || y < 0 || y > canvas.height) return;
+            currentPath.setAttribute("d", `${currentPath.getAttribute("d")} L ${x} ${y}`);
         });
-        window.addEventListener('mouseup', () => isDrawing = false);
+
+        window.addEventListener('mouseup', () => { isDrawing = false; currentPath = null; });
+
         container.appendChild(canvas); container.appendChild(svg); canvasArea.appendChild(container);
         pageData[id] = { history:[] };
         const tab = document.createElement('div'); tab.innerText=id; tab.className='tab'; tab.onclick=()=>switchPage(id); topTabs.appendChild(tab);
@@ -210,9 +235,9 @@
         reader.readAsArrayBuffer(file);
     };
 
-    function switchPage(id) { currentPageId = id; document.querySelectorAll('.page-container').forEach(c=>c.classList.remove('active')); document.getElementById('container-'+id).classList.add('active'); }
-    function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); }
-    function saveAsImage() { const c = document.getElementById('container-'+currentPageId); html2canvas(c, {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download="図面.jpg"; a.click(); }); }
+    function switchPage(id) { currentPageId = id; document.querySelectorAll('.page-container').forEach(c=>c.classList.remove('active')); document.getElementById('container-'+id).classList.add('active'); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); [...document.querySelectorAll('.tab')].find(t=>t.innerText===id)?.classList.add('active'); }
+    function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
+    function saveAsImage() { const c = document.getElementById('container-'+currentPageId); html2canvas(c, {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download="拾い出し集計.jpg"; a.click(); }); }
     window.addEventListener('keydown', e => { 
         if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
         if(e.ctrlKey && e.key === 'z') undo();
