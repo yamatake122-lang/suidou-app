@@ -2,35 +2,50 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>水道屋アプリ v8.6 完全版</title>
+    <title>水道屋アプリ v9.1 結合版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         :root { --sidebar-width: 260px; }
         body { font-family: 'Segoe UI', Meiryo, sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
+        
+        /* レイアウト設定 */
         #sidebar { width: var(--sidebar-width); min-width: var(--sidebar-width); background: #252525; border-right: 2px solid #444; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; }
         #main-content { flex: 1; display: flex; flex-direction: column; background: #333; position: relative; overflow: hidden; }
         #canvas-area { flex: 1; overflow: auto; padding: 40px; display: flex; align-items: flex-start; justify-content: center; }
+        
+        /* キャンバス・コンテナ */
         .page-container { position: relative; display: none; background: white; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* マスデザイン */
+        /* マスデザイン (v8.6 + v9.0の融合) */
         .mass-base { position: absolute; width: 30px; height: 30px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; }
-        .mass-branch::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(90deg, #ccc 50%, transparent 50%); opacity: 0.5; }
-        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; }
-        .mass-start::before { content: ""; position: absolute; top: 2px; left: 50%; width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 50%; transform: translateX(-50%); }
-        .mass-num-label { position: absolute; top: -15px; right: -15px; background: #e91e63; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; text-align: center; line-height: 18px; font-weight: bold; border: 1px solid white; z-index: 30; }
-
-        .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; background-color: #28a745; height: 8px; }
         
+        /* 種類別の色 */
+        .mass-round { border-color: #2196F3; } /* 中間: 青 */
+        .mass-start { border-color: #e91e63; border-width: 3px; } /* 起点: 濃いピンク/赤 */
+        .mass-start::before { content: ""; position: absolute; top: 2px; left: 50%; width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 50%; transform: translateX(-50%); }
+        
+        .mass-branch { border-color: #4CAF50; } /* 分岐: 緑 */
+        .mass-branch::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background: linear-gradient(90deg, #4CAF50 50%, transparent 50%); opacity: 0.4; }
+        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; }
+
+        .mass-num-label { position: absolute; top: -15px; right: -15px; background: #333; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; text-align: center; line-height: 18px; font-weight: bold; border: 1px solid white; z-index: 30; }
+
+        /* 配管ライン */
+        .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; background-color: #28a745; height: 8px; border-radius: 4px; }
+        
+        /* サイドバーUI */
         .sidebar-section { margin-bottom: 18px; }
         .sidebar-title { font-size: 11px; font-weight: bold; color: #aaa; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 3px; }
-        button { width: 100%; padding: 10px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; }
+        button { width: 100%; padding: 10px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; transition: 0.2s; }
+        button:hover { filter: brightness(1.2); }
         .btn-draw { background: #444; color: #ccc; text-align: left; }
         .btn-draw.active-sel { background: #007bff; color: white; border: 1px solid #fff; }
         .btn-special { background: #ff9800; color: #000; text-align: center; font-size: 12px; margin-top: 10px; }
 
+        /* タブ */
         #top-tabs { height: 40px; background: #111; display: flex; align-items: flex-end; padding-left: 10px; }
         .tab { padding: 8px 15px; cursor: pointer; background: #222; color: #888; border: 1px solid #444; border-radius: 5px 5px 0 0; margin-right: 2px; font-size: 11px; }
         .tab.active { background: #007bff; color: white; }
@@ -39,27 +54,27 @@
 <body>
 
 <div id="sidebar">
-    <button style="background:#eee;color:#111" onclick="document.getElementById('file-input').click()">📁 図面読み込み</button>
+    <button style="background:#eee;color:#111" onclick="document.getElementById('file-input').click()">📁 図面読み込み (PDF/画像)</button>
     <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
     
     <div class="sidebar-section">
         <div class="sidebar-title">1. 下流(放流先)から道中</div>
-        <button id="btn-mass-round" class="btn-draw active-sel" onclick="setMode('mass-round')">○ 中間マス (丸のみ)</button>
+        <button id="btn-mass-round" class="btn-draw active-sel" onclick="setMode('mass-round')">○ 中間マス (青)</button>
     </div>
     <div class="sidebar-section">
         <div class="sidebar-title">2. 建物付近(合流)</div>
-        <button id="btn-mass-branch" class="btn-draw" onclick="setMode('mass-branch')">◑ 分岐マス (Rキーで回転)</button>
+        <button id="btn-mass-branch" class="btn-draw" onclick="setMode('mass-branch')">◑ 分岐マス (緑・Rで回転)</button>
     </div>
     <div class="sidebar-section">
         <div class="sidebar-title">3. 最上流(ゴール)</div>
-        <button id="btn-mass-start" class="btn-draw" onclick="setMode('mass-start')">⦿ 起点マス (偏芯丸)</button>
+        <button id="btn-mass-start" class="btn-draw" onclick="setMode('mass-start')">⦿ 起点マス (赤)</button>
     </div>
     <div class="sidebar-section">
-        <button class="btn-special" onclick="connectMasses()">⚡ 配管を自動生成</button>
+        <button class="btn-special" onclick="connectMasses()">⚡ 配管を自動生成 (L字)</button>
     </div>
-    <div class="sidebar-section">
+    <div class="sidebar-section" style="margin-top:auto;">
         <button onclick="undo()" style="background:#6c757d; color:white;">↩ 戻す (Ctrl+Z)</button>
-        <button onclick="saveAsImage()" style="background:#28a745; color:white;">📸 保存</button>
+        <button onclick="saveAsImage()" style="background:#28a745; color:white;">📸 完了画像を保存</button>
     </div>
 </div>
 
@@ -81,41 +96,59 @@
         document.getElementById('btn-' + currentMode)?.classList.add('active-sel');
     }
 
+    // 描画処理
     function handleDraw(x, y, container) {
         if(!currentMode.startsWith('mass')) return;
         const data = pageData[currentPageId];
         const num = data.history.filter(i => i.mode.startsWith('mass')).length + 1;
+        
         const m = document.createElement('div');
-        m.className = `mass-base ${currentMode.replace('mass-', 'mass-')}`;
+        m.className = `mass-base ${currentMode}`;
         m.style.left = x + 'px'; m.style.top = y + 'px';
         m.style.transform = `translate(-50%, -50%) rotate(${currentRot}deg)`;
+        
         const label = document.createElement('div');
-        label.className = 'mass-num-label'; label.innerText = num;
-        label.style.transform = `rotate(${-currentRot}deg)`;
+        label.className = 'mass-num-label'; 
+        label.innerText = num;
+        label.style.transform = `rotate(${-currentRot}deg)`; // ラベルは常に水平
+        
         m.appendChild(label);
         container.appendChild(m);
         data.history.push({mode: currentMode, pos: {x, y}, rot: currentRot, elements:[m]});
     }
 
+    // 配管接続ロジック (L字対応)
     function connectMasses() {
         if (!currentPageId) return;
         const data = pageData[currentPageId];
         const container = document.getElementById('container-' + currentPageId);
+        
+        // 既存の配管(route)を一度削除（再生成のため）
+        data.history = data.history.filter(item => {
+            if (item.mode === 'route') {
+                item.elements.forEach(e => e.remove());
+                return false;
+            }
+            return true;
+        });
+
         const massItems = data.history.filter(item => item.mode.startsWith('mass'));
         if (massItems.length < 2) return;
 
-        // メイン管の接続
+        // メイン配管をL字で繋ぐ
         for (let i = 0; i < massItems.length - 1; i++) {
-            const s = massItems[i].pos; const e = massItems[i+1].pos;
+            const s = massItems[i].pos; 
+            const e = massItems[i+1].pos;
+            // 横、次に縦
             createLine(s.x, s.y, e.x, s.y, container);
             createLine(e.x, s.y, e.x, e.y, container);
         }
 
-        // 枝管の自動生成 (分岐マスのみ)
+        // 分岐マスの枝管生成
         massItems.forEach(item => {
             if (item.mode === 'mass-branch') {
                 const rad = (item.rot * Math.PI) / 180;
-                const bLen = 50; // 枝の長さ
+                const bLen = 50; 
                 createLine(item.pos.x, item.pos.y, item.pos.x + bLen * Math.cos(rad), item.pos.y + bLen * Math.sin(rad), container);
             }
         });
@@ -123,7 +156,7 @@
 
     function createLine(x1, y1, x2, y2, container) {
         const dist = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
-        if (dist < 2) return;
+        if (dist < 3) return;
         const line = document.createElement('div');
         line.className = 'pipe-line';
         line.style.width = dist + 'px';
@@ -133,42 +166,96 @@
         pageData[currentPageId].history.push({ mode: 'route', elements: [line] });
     }
 
+    // ページUI作成
     function createPageUI(id, topTabs, canvasArea) {
-        const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
-        const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
-        canvas.addEventListener('mousedown', (ev) => handleDraw(ev.offsetX, ev.offsetY, container));
-        container.appendChild(canvas); canvasArea.appendChild(container);
+        const container = document.createElement('div'); 
+        container.id='container-'+id; 
+        container.className='page-container';
+        
+        const canvas = document.createElement('canvas'); 
+        canvas.id='canvas-'+id;
+        canvas.addEventListener('mousedown', (ev) => {
+            if(ev.target.tagName === 'CANVAS') {
+                handleDraw(ev.offsetX, ev.offsetY, container);
+            }
+        });
+        
+        container.appendChild(canvas); 
+        canvasArea.appendChild(container);
         pageData[id] = { history:[] };
-        const tab = document.createElement('div'); tab.id='tab-'+id; tab.className='tab'; tab.innerText=id; tab.onclick=()=>switchPage(id); topTabs.appendChild(tab);
+        
+        const tab = document.createElement('div'); 
+        tab.id='tab-'+id; 
+        tab.className='tab'; 
+        tab.innerText=id; 
+        tab.onclick=()=>switchPage(id); 
+        topTabs.appendChild(tab);
     }
 
+    // ファイル処理
     document.getElementById('file-input').onchange = async (e) => {
         const file = e.target.files[0]; if(!file) return;
         const reader = new FileReader();
         reader.onload = async function(){
             const topTabs = document.getElementById('top-tabs'), canvasArea = document.getElementById('canvas-area');
             topTabs.innerHTML = ''; canvasArea.innerHTML = '';
+            
             if(file.type==="application/pdf"){
                 const pdf = await pdfjsLib.getDocument({data: new Uint8Array(this.result)}).promise;
                 for(let i=1;i<=pdf.numPages;i++){
-                    const id='P'+i; createPageUI(id, topTabs, canvasArea);
-                    const page = await pdf.getPage(i); const vp = page.getViewport({scale:1.5});
-                    const canvas = document.getElementById('canvas-'+id); canvas.width=vp.width; canvas.height=vp.height;
+                    const id='Page'+i; createPageUI(id, topTabs, canvasArea);
+                    const page = await pdf.getPage(i); 
+                    const vp = page.getViewport({scale:1.5}); // 解像度
+                    const canvas = document.getElementById('canvas-'+id); 
+                    canvas.width=vp.width; canvas.height=vp.height;
                     await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
                 }
             } else {
-                const id='P1'; createPageUI(id, topTabs, canvasArea);
-                const img = new Image(); img.onload=()=>{ const canvas=document.getElementById('canvas-'+id); canvas.width=img.width; canvas.height=img.height; canvas.getContext('2d').drawImage(img,0,0); }; img.src=URL.createObjectURL(file);
+                const id='Image'; createPageUI(id, topTabs, canvasArea);
+                const img = new Image(); 
+                img.onload=()=>{ 
+                    const canvas=document.getElementById('canvas-'+id); 
+                    canvas.width=img.width; canvas.height=img.height; 
+                    canvas.getContext('2d').drawImage(img,0,0); 
+                }; 
+                img.src=URL.createObjectURL(file);
             }
-            switchPage('P1');
+            switchPage(Object.keys(pageData)[0]);
         };
         reader.readAsArrayBuffer(file);
     };
 
-    function switchPage(id) { currentPageId = id; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.getElementById('tab-'+id).classList.add('active'); document.querySelectorAll('.page-container').forEach(c=>c.classList.remove('active')); document.getElementById('container-'+id).classList.add('active'); }
-    function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0){ h.pop().elements.forEach(e=>e.remove()); } }
-    function saveAsImage() { const container = document.getElementById('container-' + currentPageId); html2canvas(container, { scale: 2 }).then(canvas => { const link = document.createElement('a'); link.download = `拾い出し.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.9); link.click(); }); }
-    window.addEventListener('keydown', e => { if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; if(e.ctrlKey && e.key === 'z') undo(); });
+    function switchPage(id) { 
+        currentPageId = id; 
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); 
+        if(document.getElementById('tab-'+id)) document.getElementById('tab-'+id).classList.add('active'); 
+        document.querySelectorAll('.page-container').forEach(c=>c.classList.remove('active')); 
+        if(document.getElementById('container-'+id)) document.getElementById('container-'+id).classList.add('active'); 
+    }
+
+    function undo() { 
+        if(!currentPageId) return; 
+        const h = pageData[currentPageId].history; 
+        if(h.length>0){ 
+            h.pop().elements.forEach(e=>e.remove()); 
+        } 
+    }
+
+    function saveAsImage() { 
+        const container = document.getElementById('container-' + currentPageId);
+        if(!container) return;
+        html2canvas(container, { scale: 2 }).then(canvas => { 
+            const link = document.createElement('a'); 
+            link.download = `排水図面_${new Date().getTime()}.jpg`; 
+            link.href = canvas.toDataURL("image/jpeg", 0.9); 
+            link.click(); 
+        }); 
+    }
+
+    window.addEventListener('keydown', e => { 
+        if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
+        if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); } 
+    });
 </script>
 </body>
 </html>
