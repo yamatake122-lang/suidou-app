@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v9.8 Pro</title>
+    <title>設備拾い出しツール v10.0 Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -15,15 +15,19 @@
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 200px; line-height: 1.6; }
-        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; text-align: center; }
+        /* 集計パネル（バツボタン修正） */
+        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px 12px 12px 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; line-height: 1.6; }
+        #panel-close { 
+            position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; 
+            border-radius: 50%; width: 20px; height: 20px; font-size: 12px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;
+        }
         #panel-open { position: absolute; top: 10px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; margin-bottom: 2px; }
         .cnt-val { font-weight: bold; color: #0f0; }
         .cnt-sub { color: #ff9800; font-weight: bold; }
 
         .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; }
-        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; z-index: -1; }
         .inner-text { display: block; }
         .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; z-index: 30; }
         .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
@@ -47,10 +51,10 @@
 <div id="panel-open" onclick="togglePanel(true)">📊 集計を表示</div>
 <div id="counter-panel">
     <button id="panel-close" onclick="togglePanel(false)">×</button>
-    <div style="font-weight:bold; color:#00d2ff; border-bottom:1px solid #00d2ff; margin-bottom:5px;">【配管・継手】</div>
-    <div class="cnt-row"><span>VU100:</span> <span><span id="len-vu100" class="cnt-val">0.0</span>m / <span id="qty-vu100" class="cnt-val">0</span>ヶ</span></div>
-    <div class="cnt-row"><span>VU75:</span> <span><span id="len-vu75" class="cnt-val">0.0</span>m / <span id="qty-vu75" class="cnt-val">0</span>ヶ</span></div>
-    <div class="cnt-row"><span>VU50:</span> <span><span id="len-vu50" class="cnt-val">0.0</span>m / <span id="qty-vu50" class="cnt-val">0</span>ヶ</span></div>
+    <div style="font-weight:bold; color:#00d2ff; border-bottom:1px solid #00d2ff; margin-bottom:5px;">【配管・継手、支持】</div>
+    <div class="cnt-row"><span>VU100(4m毎):</span> <span><span id="len-vu100" class="cnt-val">0.0</span>m / <span id="qty-vu100" class="cnt-val">0</span>ヶ</span></div>
+    <div class="cnt-row"><span>VU75(1m毎):</span> <span><span id="len-vu75" class="cnt-val">0.0</span>m / <span id="qty-vu75" class="cnt-val">0</span>ヶ</span></div>
+    <div class="cnt-row"><span>VU50(1m毎):</span> <span><span id="len-vu50" class="cnt-val">0.0</span>m / <span id="qty-vu50" class="cnt-val">0</span>ヶ</span></div>
     <div class="cnt-row"><span>給水 VP:</span> <span><span id="len-supply" class="cnt-val">0.0</span>m</span></div>
     <div class="cnt-row"><span>給湯 HT:</span> <span><span id="len-hot" class="cnt-val">0.0</span>m</span></div>
     
@@ -72,10 +76,10 @@
     </div>
 
     <div class="sidebar-section">
-        <div class="sidebar-title">① 配管種別 (選んでから描画)</div>
-        <button id="pipe-vu100" onclick="setPipe('vu100')">🟩 VU100</button>
-        <button id="pipe-vu75" onclick="setPipe('vu75')">線 VU75</button>
-        <button id="pipe-vu50" onclick="setPipe('vu50')">線 VU50</button>
+        <div class="sidebar-title">① 配管種別</div>
+        <button id="pipe-vu100" onclick="setPipe('vu100')">🟩 VU100 (4m毎)</button>
+        <button id="pipe-vu75" onclick="setPipe('vu75')">線 VU75 (1m毎)</button>
+        <button id="pipe-vu50" onclick="setPipe('vu50')">線 VU50 (1m毎)</button>
         <button id="pipe-supply" onclick="setPipe('supply')">🟦 給水 VP</button>
         <button id="pipe-hot" onclick="setPipe('hot')">🟥 給湯 HT</button>
     </div>
@@ -83,7 +87,7 @@
     <div class="sidebar-section">
         <div class="sidebar-title">② 描画モード</div>
         <button id="mode-mass" onclick="setMode('mass')">🔘 マス/器具 配置</button>
-        <button id="mode-manual" onclick="setMode('manual')">📏 直線配管 (クリック2点)</button>
+        <button id="mode-manual" onclick="setMode('manual')">📏 直線配管</button>
         <button id="mode-pen" onclick="setMode('pen')">🖊 自由手書き</button>
     </div>
 
@@ -143,13 +147,12 @@
 
     function updateCounters() {
         const pxPerM = parseFloat(document.getElementById('scale-px').value) || 100;
-        const stats = { vu100:{l:0, q:0}, vu75:{l:0, q:0}, vu50:{l:0, q:0}, supply:{l:0}, hot:{l:0} };
+        const stats = { vu100:{l:0}, vu75:{l:0}, vu50:{l:0}, supply:{l:0}, hot:{l:0} };
         let valve = 0, union = 0, tokoS = 0, kabeL = 0;
 
         Object.values(pageData).forEach(data => {
             data.history.forEach(h => {
                 if(h.isMass) {
-                    if(!h.isKigu && stats[h.pipeType]) stats[h.pipeType].q++;
                     const cfg = MASS_CONFIG[h.mode];
                     if(cfg) { valve += cfg.valve; union += cfg.union; tokoS += cfg.tokoS; kabeL += cfg.kabeL; }
                 }
@@ -157,12 +160,23 @@
             });
         });
 
-        ['vu100','vu75','vu50'].forEach(t => {
-            document.getElementById(`len-${t}`).innerText = (stats[t].l / pxPerM).toFixed(1);
-            document.getElementById(`qty-${t}`).innerText = stats[t].q;
-        });
+        // 配管長(m)の計算
+        const L100 = stats.vu100.l / pxPerM;
+        const L75 = stats.vu75.l / pxPerM;
+        const L50 = stats.vu50.l / pxPerM;
+
+        document.getElementById('len-vu100').innerText = L100.toFixed(1);
+        document.getElementById('len-vu75').innerText = L75.toFixed(1);
+        document.getElementById('len-vu50').innerText = L50.toFixed(1);
         document.getElementById('len-supply').innerText = (stats.supply.l / pxPerM).toFixed(1);
         document.getElementById('len-hot').innerText = (stats.hot.l / pxPerM).toFixed(1);
+
+        // 継手・支持具の計算ロジック
+        // 100は4mごと、75/50は1mごとにカウント（切り上げ）
+        document.getElementById('qty-vu100').innerText = L100 > 0 ? Math.ceil(L100 / 4) : 0;
+        document.getElementById('qty-vu75').innerText = L75 > 0 ? Math.ceil(L75 / 1) : 0;
+        document.getElementById('qty-vu50').innerText = L50 > 0 ? Math.ceil(L50 / 1) : 0;
+
         document.getElementById('parts-valve').innerText = valve;
         document.getElementById('parts-union').innerText = union;
         document.getElementById('parts-toko-s').innerText = tokoS;
