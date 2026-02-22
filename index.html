@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.2 Pro</title>
+    <title>設備拾い出しツール v10.3 Pro (Multi-Page)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -10,31 +10,27 @@
         body { font-family: 'Segoe UI', Meiryo, sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
         #sidebar { width: var(--sidebar-width); background: #252525; border-right: 2px solid #444; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
         #main-content { flex: 1; display: flex; flex-direction: column; background: #333; position: relative; overflow: hidden; }
+        
+        /* ページ切り替えタブ */
+        #top-tabs { display: flex; background: #222; border-bottom: 1px solid #444; overflow-x: auto; white-space: nowrap; }
+        .tab-btn { padding: 10px 20px; cursor: pointer; border-right: 1px solid #444; background: #333; color: #aaa; font-size: 12px; font-weight: bold; }
+        .tab-btn.active { background: #007bff; color: white; }
+
         #canvas-area { flex: 1; overflow: auto; padding: 20px; display: flex; align-items: flex-start; justify-content: center; }
         .page-container { position: relative; display: none; background: white; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px 12px 12px 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; line-height: 1.6; }
-        #panel-close { 
-            position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; 
-            border-radius: 50%; width: 20px; height: 20px; font-size: 12px; font-weight: bold;
-            display: flex; align-items: center; justify-content: center; padding: 0;
-        }
-        #panel-open { position: absolute; top: 10px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
+        /* 集計パネル */
+        #counter-panel { position: absolute; top: 50px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px 12px 12px 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; line-height: 1.6; }
+        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        #panel-open { position: absolute; top: 50px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; margin-bottom: 2px; }
         .cnt-val { font-weight: bold; color: #0f0; }
-        .cnt-sub { color: #ff9800; font-weight: bold; }
 
         /* マスマーク */
         .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; }
-        
-        /* 分岐マスの半径線デザイン (復元) */
-        .mass-branch::after { 
-            content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 2px; 
-            background: #333; transform-origin: 0 50%; z-index: 1; 
-        }
-
+        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 2px; background: #333; transform-origin: 0 50%; z-index: 1; }
         .inner-text { display: block; z-index: 5; position: relative; }
         .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; z-index: 30; }
         .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
@@ -63,12 +59,11 @@
     <div class="cnt-row"><span>VU50(1m毎):</span> <span><span id="len-vu50" class="cnt-val">0.0</span>m / <span id="qty-vu50" class="cnt-val">0</span>ヶ</span></div>
     <div class="cnt-row"><span>給水 VP:</span> <span><span id="len-supply" class="cnt-val">0.0</span>m</span></div>
     <div class="cnt-row"><span>給湯 HT:</span> <span><span id="len-hot" class="cnt-val">0.0</span>m</span></div>
-    
     <div style="font-weight:bold; color:#ff9800; border-bottom:1px solid #ff9800; margin-top:8px; margin-bottom:5px;">【器具部品】</div>
-    <div class="cnt-row"><span>バルブ:</span> <span id="parts-valve" class="cnt-sub">0</span> ヶ</div>
-    <div class="cnt-row"><span>ユニオン:</span> <span id="parts-union" class="cnt-sub">0</span> ヶ</div>
-    <div class="cnt-row"><span>床座水S:</span> <span id="parts-toko-s" class="cnt-sub">0</span> ヶ</div>
-    <div class="cnt-row"><span>壁座水L:</span> <span id="parts-kabe-l" class="cnt-sub">0</span> ヶ</div>
+    <div class="cnt-row"><span>バルブ:</span> <span id="parts-valve" class="cnt-val" style="color:#ff9800">0</span> ヶ</div>
+    <div class="cnt-row"><span>ユニオン:</span> <span id="parts-union" class="cnt-val" style="color:#ff9800">0</span> ヶ</div>
+    <div class="cnt-row"><span>床座水S:</span> <span id="parts-toko-s" class="cnt-val" style="color:#ff9800">0</span> ヶ</div>
+    <div class="cnt-row"><span>壁座水L:</span> <span id="parts-kabe-l" class="cnt-val" style="color:#ff9800">0</span> ヶ</div>
 </div>
 
 <div id="sidebar">
@@ -94,7 +89,6 @@
         <div class="sidebar-title">② 描画モード</div>
         <button id="mode-mass" onclick="setMode('mass')">🔘 マス/器具 配置</button>
         <button id="mode-manual" onclick="setMode('manual')">📏 直線配管</button>
-        <button id="mode-pen" onclick="setMode('pen')">🖊 自由手書き</button>
     </div>
 
     <div class="sidebar-section">
@@ -114,7 +108,7 @@
 </div>
 
 <div id="main-content">
-    <div id="top-tabs" style="display:flex; background:#222;"></div>
+    <div id="top-tabs"></div>
     <div id="canvas-area"></div>
 </div>
 
@@ -202,17 +196,12 @@
             m.className = `mass-base mass-${massType} ${cfg.kigu ? 'mass-kigu' : ''}`;
             m.style.left = x + 'px'; m.style.top = y + 'px';
             m.style.transform = `translate(-50%, -50%) rotate(${currentRot}deg)`;
-            
-            const txt = document.createElement('span');
-            txt.className = 'inner-text'; txt.innerText = cfg.label;
+            const txt = document.createElement('span'); txt.className = 'inner-text'; txt.innerText = cfg.label;
             txt.style.transform = `rotate(-${currentRot}deg)`;
-            
-            const label = document.createElement('div');
-            label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
+            const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
             label.style.transform = `rotate(-${currentRot}deg)`;
-            
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
-            data.history.push({isMass:true, isKigu:cfg.kigu, mode:massType, pos:{x,y}, pipeType:currentPipe, elements:[m]});
+            data.history.push({isMass:true, mode:massType, pos:{x,y}, pipeType:currentPipe, elements:[m]});
         } else if(currentMode === 'manual') {
             if(!manualStart) manualStart = {x, y};
             else { createLine(manualStart.x, manualStart.y, x, y, container, currentPipe); manualStart = null; }
@@ -231,6 +220,51 @@
         pageData[currentPageId].history.push({isMass:false, pipeType:type, elements:[line], len: dist});
     }
 
+    function createPageUI(id, label) {
+        const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
+        const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
+        canvas.addEventListener('mousedown', (ev) => handleDraw(ev.offsetX, ev.offsetY, container));
+        container.appendChild(canvas); document.getElementById('canvas-area').appendChild(container);
+        pageData[id] = { history:[] };
+        
+        const tab = document.createElement('div'); tab.className='tab-btn'; tab.id='tab-'+id; tab.innerText=label;
+        tab.onclick=()=>switchPage(id); document.getElementById('top-tabs').appendChild(tab);
+    }
+
+    document.getElementById('file-input').onchange = async (e) => {
+        const file = e.target.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(){
+            document.getElementById('top-tabs').innerHTML = ''; document.getElementById('canvas-area').innerHTML = '';
+            pageData = {};
+            if(file.type==="application/pdf"){
+                const pdf = await pdfjsLib.getDocument({data: new Uint8Array(this.result)}).promise;
+                for(let i=1; i<=pdf.numPages; i++){
+                    const id='P'+i; createPageUI(id, 'Page '+i);
+                    const page = await pdf.getPage(i); const vp = page.getViewport({scale:1.5});
+                    const canvas = document.getElementById('canvas-'+id); canvas.width=vp.width; canvas.height=vp.height;
+                    await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+                }
+                switchPage('P1');
+            } else {
+                createPageUI('P1', 'Image');
+                const img = new Image(); img.onload=()=>{ const c=document.getElementById('canvas-P1'); c.width=img.width; c.height=img.height; c.getContext('2d').drawImage(img,0,0); }; img.src=URL.createObjectURL(file);
+                switchPage('P1');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    function switchPage(id) {
+        currentPageId = id;
+        document.querySelectorAll('.page-container').forEach(e=>e.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
+        document.getElementById('container-'+id).classList.add('active');
+        document.getElementById('tab-'+id).classList.add('active');
+    }
+
+    function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
+    function saveAsImage() { html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download=`図面_${currentPageId}.jpg`; a.click(); }); }
     function connectMasses() {
         if (!currentPageId) return;
         const data = pageData[currentPageId];
@@ -243,41 +277,6 @@
         }
         updateCounters();
     }
-
-    function createPageUI(id, topTabs, canvasArea) {
-        const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
-        const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
-        canvas.addEventListener('mousedown', (ev) => handleDraw(ev.offsetX, ev.offsetY, container));
-        container.appendChild(canvas); canvasArea.appendChild(container);
-        pageData[id] = { history:[] };
-        const tab = document.createElement('div'); tab.innerText=id; tab.style.padding='10px'; tab.style.cursor='pointer'; tab.onclick=()=>switchPage(id); topTabs.appendChild(tab);
-    }
-
-    document.getElementById('file-input').onchange = async (e) => {
-        const file = e.target.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = async function(){
-            document.getElementById('top-tabs').innerHTML = ''; document.getElementById('canvas-area').innerHTML = '';
-            if(file.type==="application/pdf"){
-                const pdf = await pdfjsLib.getDocument({data: new Uint8Array(this.result)}).promise;
-                for(let i=1; i<=pdf.numPages; i++){
-                    const id='P1'; createPageUI(id, document.getElementById('top-tabs'), document.getElementById('canvas-area'));
-                    const page = await pdf.getPage(i); const vp = page.getViewport({scale:1.5});
-                    const canvas = document.getElementById('canvas-'+id); canvas.width=vp.width; canvas.height=vp.height;
-                    await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
-                }
-            } else {
-                createPageUI('P1', document.getElementById('top-tabs'), document.getElementById('canvas-area'));
-                const img = new Image(); img.onload=()=>{ const c=document.getElementById('canvas-P1'); c.width=img.width; c.height=img.height; c.getContext('2d').drawImage(img,0,0); }; img.src=URL.createObjectURL(file);
-            }
-            switchPage('P1');
-        };
-        reader.readAsArrayBuffer(file);
-    };
-
-    function switchPage(id) { currentPageId = id; document.querySelectorAll('.page-container').forEach(e=>e.classList.remove('active')); document.getElementById('container-'+id).classList.add('active'); }
-    function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
-    function saveAsImage() { html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download="設備図面.jpg"; a.click(); }); }
     window.addEventListener('keydown', e => { 
         if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
         if(e.ctrlKey && e.key === 'z') undo(); 
