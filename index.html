@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.16 (Snap & Auto-Draw Fixed)</title>
+    <title>設備拾い出しツール v10.17 (Auto-Pipe Trace Fixed)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -145,6 +145,7 @@
     let currentTool = 'pen'; 
     let activePen = { color: '#000', width: 2 };
     let manualStart = null, calibStart = null, isMouseDown = false, currentPath = null;
+    let lastAutoMass = null; // 自動描画用の直前のマス記録
 
     const MASS_CONFIG = {
         round: { label: '', valve: 0, union: 0, tokoS: 0, kabeL: 0, kigu: false },
@@ -159,7 +160,7 @@
     function setPipe(p) { currentPipe = p; updateUI(); }
     
     function setMode(m) { 
-        currentMode = m; manualStart = null; calibStart = null; 
+        currentMode = m; manualStart = null; calibStart = null; lastAutoMass = null;
         document.getElementById('line-preview').style.display = 'none';
         document.getElementById('pen-palette').style.display = (m === 'pen') ? 'block' : 'none';
         if (m !== 'pen') setTool('pen');
@@ -202,17 +203,27 @@
         if(currentMode === 'mass') document.getElementById('mtype-'+massType)?.classList.add('active-sel');
     }
 
-    // ★重要: 吸着ロジック
     function getSnappedPos(x, y) {
-        if (!currentPageId) return {x, y};
-        // 既存の「マス」の中から、クリック位置に近いものを探す (半径20px以内)
+        if (!currentPageId) return {x, y, mass: null};
         const target = pageData[currentPageId].history.find(h => h.isMass && Math.sqrt((h.pos.x - x)**2 + (h.pos.y - y)**2) < 20);
-        return target ? {x: target.pos.x, y: target.pos.y} : {x, y};
+        return target ? {x: target.pos.x, y: target.pos.y, mass: target} : {x, y, mass: null};
+    }
+
+    // ★重要: 自動描画ロジック (マウス移動中に呼ばれる)
+    function checkAutoConnect(x, y, container) {
+        if(currentMode !== 'manual' || !isMouseDown) return;
+        const snapped = getSnappedPos(x, y);
+        if(snapped.mass && snapped.mass !== lastAutoMass) {
+            if(lastAutoMass) {
+                createLine(lastAutoMass.pos.x, lastAutoMass.pos.y, snapped.x, snapped.y, container, currentPipe);
+                updateCounters();
+            }
+            lastAutoMass = snapped.mass;
+        }
     }
 
     function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
-        // クリック位置をマスに吸着させる
         const snapped = getSnappedPos(x, y);
 
         if(currentMode === 'calib') {
@@ -234,69 +245,59 @@
             const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
             label.style.transform = `rotate(-${currentRot}deg)`;
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
-            // 位置情報を履歴に保存（スナップ用）
             data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m]});
         } else if(currentMode === 'manual') {
+            // クリックでの直線描画
             if(!manualStart) {
-                manualStart = snapped;
+                manualStart = {x: snapped.x, y: snapped.y};
                 const preview = document.getElementById('line-preview');
                 preview.style.display = 'block';
                 preview.className = `pipe-line pipe-${currentPipe}`;
             } else {
                 createLine(manualStart.x, manualStart.y, snapped.x, snapped.y, container, currentPipe);
-                // ★次への連続描画のため、今回の終点を次の起点にする
-                manualStart = snapped; 
-                // プレビューの起点も更新
-                const preview = document.getElementById('line-preview');
-                preview.style.left = manualStart.x + 'px';
-                preview.style.top = manualStart.y + 'px';
+                manualStart = {x: snapped.x, y: snapped.y};
             }
         }
         updateCounters();
     }
 
     window.addEventListener('mousemove', (e) => {
-        if (currentMode === 'manual' && manualStart) {
-            const container = document.getElementById('container-' + currentPageId);
-            if (!container) return;
-            const rect = container.getBoundingClientRect();
-            // スクロールとコンテナ位置を考慮した座標算出
-            const x = e.clientX - rect.left + container.scrollLeft;
-            const y = e.clientY - rect.top + container.scrollTop;
-            const snapped = getSnappedPos(x, y);
-            
-            const preview = document.getElementById('line-preview');
-            const dist = Math.sqrt((snapped.x - manualStart.x)**2 + (snapped.y - manualStart.y)**2);
-            
-            // プレビュー表示（座標計算の修正）
-            preview.style.width = dist + 'px';
-            preview.style.left = manualStart.x + 'px'; 
-            preview.style.top = manualStart.y + 'px';
-            preview.style.transform = `rotate(${Math.atan2(snapped.y - manualStart.y, snapped.x - manualStart.x)}rad) translateY(-50%)`;
-        }
+        const container = document.getElementById('container-' + currentPageId);
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left + container.scrollLeft;
+        const y = e.clientY - rect.top + container.scrollTop;
+
+        // 自由手書き
         if (isMouseDown && currentPath && currentMode === 'pen' && currentTool === 'pen') {
-            const container = document.getElementById('container-' + currentPageId);
-            const rect = container.querySelector('canvas').getBoundingClientRect();
-            const x = e.clientX - rect.left; const y = e.clientY - rect.top;
             const d = currentPath.getAttribute("d");
             currentPath.setAttribute("d", `${d} L ${x} ${y}`);
         }
+        // ★自動描画チェック
+        if (isMouseDown && currentMode === 'manual') {
+            checkAutoConnect(x, y, container);
+        }
+        // 直線プレビュー
+        if (currentMode === 'manual' && manualStart) {
+            const snapped = getSnappedPos(x, y);
+            const preview = document.getElementById('line-preview');
+            const dist = Math.sqrt((snapped.x - manualStart.x)**2 + (snapped.y - manualStart.y)**2);
+            preview.style.width = dist + 'px';
+            preview.style.left = manualStart.x + 'px';
+            preview.style.top = manualStart.y + 'px';
+            preview.style.transform = `rotate(${Math.atan2(snapped.y - manualStart.y, snapped.x - manualStart.x)}rad) translateY(-50%)`;
+        }
     });
 
-    window.addEventListener('mouseup', () => { isMouseDown = false; currentPath = null; });
-    
-    // ダブルクリックか右クリックで直線描画を終了する
-    window.addEventListener('contextmenu', (e) => {
-        if(currentMode === 'manual' && manualStart) {
-            e.preventDefault();
-            manualStart = null;
-            document.getElementById('line-preview').style.display = 'none';
-        }
+    window.addEventListener('mouseup', () => { 
+        isMouseDown = false; 
+        currentPath = null; 
+        lastAutoMass = null; // なぞり描画終了
     });
 
     function createLine(x1, y1, x2, y2, container, type) {
         const dist = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
-        if(dist < 2) return;
+        if(dist < 5) return; // 短すぎる線は引かない
         const line = document.createElement('div');
         line.className = `pipe-line pipe-${type}`;
         line.style.width = dist + 'px'; line.style.left = x1 + 'px'; line.style.top = y1 + 'px';
@@ -312,9 +313,9 @@
         svg.setAttribute("class", "drawing-svg"); svg.id='svg-'+id;
 
         canvas.addEventListener('mousedown', (ev) => {
+            isMouseDown = true;
             if(currentMode === 'pen') {
                 if(currentTool === 'eraser') return;
-                isMouseDown = true;
                 currentPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 currentPath.setAttribute("fill", "none"); currentPath.setAttribute("stroke", activePen.color);
                 currentPath.setAttribute("stroke-width", activePen.width); currentPath.setAttribute("stroke-linecap", "round");
@@ -327,6 +328,9 @@
                 svg.appendChild(currentPath);
                 pageData[id].history.push({elements:[currentPath]});
             } else {
+                // 自動描画の起点チェック
+                const snapped = getSnappedPos(ev.offsetX, ev.offsetY);
+                if(currentMode === 'manual') lastAutoMass = snapped.mass;
                 handleDraw(ev.offsetX, ev.offsetY, container);
             }
         });
@@ -411,6 +415,9 @@
         if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
         if(e.ctrlKey && e.key === 'z') undo(); 
     });
+    // 右クリックで配管開始点をリセット
+    window.addEventListener('contextmenu', e => { if(currentMode === 'manual') { e.preventDefault(); manualStart = null; lastAutoMass = null; document.getElementById('line-preview').style.display='none'; } });
+
     updateUI();
 </script>
 </body>
