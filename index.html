@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.19 (Single Pipe Mode)</title>
+    <title>設備拾い出しツール v10.20 (Connection Reset Logic)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -87,8 +87,8 @@
     <div class="sidebar-section">
         <div class="sidebar-title">② 描画モード</div>
         <button id="mode-mass" onclick="setMode('mass')">🔘 マス/器具 配置</button>
-        <button id="btn-auto-pipe" onclick="autoConnectPipes()" style="background:#28a745; color:white; border:2px solid #fff;">⚡ 配置順に配管を接続</button>
-        <button id="mode-manual" onclick="setMode('manual')">📏 手動で配管を引く</button>
+        <button id="btn-auto-pipe" onclick="autoConnectPipes()" style="background:#28a745; color:white; border:2px solid #fff;">⚡ 配置したマスを接続</button>
+        <button id="mode-manual" onclick="setMode('manual')">📏 手動で1本引く</button>
         <button id="mode-pen" onclick="setMode('pen')" style="background:#e67e22; color:white;">🖊 自由手書き (注記)</button>
         
         <div id="pen-palette">
@@ -199,14 +199,24 @@
         return target ? {x: target.pos.x, y: target.pos.y} : {x, y};
     }
 
+    // ★重要: 自動配管接続ロジック (未接続のマスのみ繋ぐ)
     function autoConnectPipes() {
         if (!currentPageId) return;
         const container = document.getElementById('container-' + currentPageId);
-        const masses = pageData[currentPageId].history.filter(h => h.isMass);
-        if (masses.length < 2) { alert("マスを2つ以上配置してください。"); return; }
+        // 「connected: true」になっていないマスだけを抽出
+        const masses = pageData[currentPageId].history.filter(h => h.isMass && !h.connected);
+        
+        if (masses.length < 2) { 
+            alert("新しく配置したマスが2つ以上ありません。"); 
+            return; 
+        }
+
         for (let i = 0; i < masses.length - 1; i++) {
             createLine(masses[i].pos.x, masses[i].pos.y, masses[i+1].pos.x, masses[i+1].pos.y, container, currentPipe);
         }
+        
+        // 接続したマスに「接続済み」フラグを立てる
+        masses.forEach(m => m.connected = true);
         updateCounters();
     }
 
@@ -230,12 +240,16 @@
             m.style.transform = `translate(-50%, -50%) rotate(${currentRot}deg)`;
             const txt = document.createElement('span'); txt.className = 'inner-text'; txt.innerText = cfg.label;
             txt.style.transform = `rotate(-${currentRot}deg)`;
-            const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
+            
+            // 未接続のマスの中での連番を振る
+            const unConnectedCount = data.history.filter(i=>i.isMass && !i.connected).length + 1;
+            const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = unConnectedCount;
             label.style.transform = `rotate(-${currentRot}deg)`;
+            
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
-            data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m]});
+            // 「connected: false」で追加
+            data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m], connected: false});
         } else if(currentMode === 'manual') {
-            // ★修正ポイント: 始点と終点で完結させるロジック
             if(!manualStart) {
                 manualStart = snapped;
                 const preview = document.getElementById('line-preview');
@@ -243,7 +257,6 @@
                 preview.className = `pipe-line pipe-${currentPipe}`;
             } else {
                 createLine(manualStart.x, manualStart.y, snapped.x, snapped.y, container, currentPipe);
-                // 描画後、リセットすることで連続しないようにする
                 manualStart = null; 
                 document.getElementById('line-preview').style.display = 'none';
             }
