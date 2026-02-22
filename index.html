@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.3 Pro (Multi-Page)</title>
+    <title>設備拾い出しツール v10.4 Pro (Snap Connect)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -10,29 +10,27 @@
         body { font-family: 'Segoe UI', Meiryo, sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; overflow: hidden; }
         #sidebar { width: var(--sidebar-width); background: #252525; border-right: 2px solid #444; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
         #main-content { flex: 1; display: flex; flex-direction: column; background: #333; position: relative; overflow: hidden; }
-        
-        /* ページ切り替えタブ */
-        #top-tabs { display: flex; background: #222; border-bottom: 1px solid #444; overflow-x: auto; white-space: nowrap; }
+        #top-tabs { display: flex; background: #222; border-bottom: 1px solid #444; overflow-x: auto; }
         .tab-btn { padding: 10px 20px; cursor: pointer; border-right: 1px solid #444; background: #333; color: #aaa; font-size: 12px; font-weight: bold; }
         .tab-btn.active { background: #007bff; color: white; }
-
         #canvas-area { flex: 1; overflow: auto; padding: 20px; display: flex; align-items: flex-start; justify-content: center; }
         .page-container { position: relative; display: none; background: white; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* 集計パネル */
-        #counter-panel { position: absolute; top: 50px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px 12px 12px 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; line-height: 1.6; }
-        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-        #panel-open { position: absolute; top: 50px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
-        .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; margin-bottom: 2px; }
+        /* プレビュー用の線 */
+        #line-preview { position: absolute; height: 2px; background: rgba(0, 210, 255, 0.5); pointer-events: none; transform-origin: 0 50%; z-index: 100; display: none; }
+
+        #counter-panel { position: absolute; top: 50px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; }
+        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+        #panel-open { position: absolute; top: 50px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; }
+        .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
         .cnt-val { font-weight: bold; color: #0f0; }
 
-        /* マスマーク */
         .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; }
         .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 2px; background: #333; transform-origin: 0 50%; z-index: 1; }
         .inner-text { display: block; z-index: 5; position: relative; }
-        .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; z-index: 30; }
+        .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border: 1px solid white; z-index: 30; }
         .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
 
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; }
@@ -69,13 +67,6 @@
 <div id="sidebar">
     <button style="background:#eee;color:#111;text-align:center" onclick="document.getElementById('file-input').click()">📁 図面読み込み</button>
     <input type="file" id="file-input" style="display:none;" accept=".pdf,image/*">
-    
-    <div class="sidebar-section">
-        <div class="sidebar-title">📏 尺設定</div>
-        <button id="btn-mode-calib" onclick="setMode('calib')" style="background:#673ab7;color:white;text-align:center">🎯 1mを指定</button>
-        <input type="number" id="scale-px" value="100" style="display:none;">
-    </div>
-
     <div class="sidebar-section">
         <div class="sidebar-title">① 配管種別</div>
         <button id="pipe-vu100" onclick="setPipe('vu100')">🟩 VU100 (4m毎)</button>
@@ -84,13 +75,11 @@
         <button id="pipe-supply" onclick="setPipe('supply')">🟦 給水 VP</button>
         <button id="pipe-hot" onclick="setPipe('hot')">🟥 給湯 HT</button>
     </div>
-
     <div class="sidebar-section">
         <div class="sidebar-title">② 描画モード</div>
         <button id="mode-mass" onclick="setMode('mass')">🔘 マス/器具 配置</button>
         <button id="mode-manual" onclick="setMode('manual')">📏 直線配管</button>
     </div>
-
     <div class="sidebar-section">
         <div class="sidebar-title">③ マス・器具 (Rで回転)</div>
         <button id="mtype-round" onclick="setMassType('round')">○ マス</button>
@@ -101,15 +90,17 @@
         <button id="mtype-toilet" onclick="setMassType('toilet')">🚽 トイレ</button>
         <button id="mtype-laundry" onclick="setMassType('laundry')">🧺 洗濯機</button>
     </div>
-
-    <button style="background:#ff9800;color:#000;text-align:center;margin-top:10px;" onclick="connectMasses()">⚡ マスを自動接続</button>
     <button onclick="undo()" style="background:#6c757d;color:white;text-align:center">↩ 戻す (Ctrl+Z)</button>
+    <button id="btn-mode-calib" onclick="setMode('calib')" style="background:#673ab7;color:white;text-align:center">🎯 1mを指定</button>
+    <input type="number" id="scale-px" value="100" style="display:none;">
     <button onclick="saveAsImage()" style="background:#28a745;color:white;text-align:center;margin-top:10px;">📸 画像として保存</button>
 </div>
 
 <div id="main-content">
     <div id="top-tabs"></div>
-    <div id="canvas-area"></div>
+    <div id="canvas-area">
+        <div id="line-preview"></div>
+    </div>
 </div>
 
 <script>
@@ -131,7 +122,11 @@
     };
 
     function setPipe(p) { currentPipe = p; updateUI(); }
-    function setMode(m) { currentMode = m; manualStart = null; calibStart = null; updateUI(); }
+    function setMode(m) { 
+        currentMode = m; manualStart = null; calibStart = null; 
+        document.getElementById('line-preview').style.display = 'none';
+        updateUI(); 
+    }
     function setMassType(t) { massType = t; currentMode = 'mass'; updateUI(); }
     function togglePanel(show) {
         document.getElementById('counter-panel').style.display = show ? 'block' : 'none';
@@ -145,48 +140,24 @@
         if(currentMode === 'mass') document.getElementById('mtype-'+massType)?.classList.add('active-sel');
     }
 
-    function updateCounters() {
-        const pxPerM = parseFloat(document.getElementById('scale-px').value) || 100;
-        const stats = { vu100:{l:0}, vu75:{l:0}, vu50:{l:0}, supply:{l:0}, hot:{l:0} };
-        let valve = 0, union = 0, tokoS = 0, kabeL = 0;
-
-        Object.values(pageData).forEach(data => {
-            data.history.forEach(h => {
-                if(h.isMass) {
-                    const cfg = MASS_CONFIG[h.mode];
-                    if(cfg) { valve += cfg.valve; union += cfg.union; tokoS += cfg.tokoS; kabeL += cfg.kabeL; }
-                }
-                if(h.len && stats[h.pipeType]) stats[h.pipeType].l += h.len;
-            });
-        });
-
-        const L100 = stats.vu100.l / pxPerM;
-        const L75 = stats.vu75.l / pxPerM;
-        const L50 = stats.vu50.l / pxPerM;
-
-        document.getElementById('len-vu100').innerText = L100.toFixed(1);
-        document.getElementById('len-vu75').innerText = L75.toFixed(1);
-        document.getElementById('len-vu50').innerText = L50.toFixed(1);
-        document.getElementById('len-supply').innerText = (stats.supply.l / pxPerM).toFixed(1);
-        document.getElementById('len-hot').innerText = (stats.hot.l / pxPerM).toFixed(1);
-
-        document.getElementById('qty-vu100').innerText = L100 > 0 ? Math.ceil(L100 / 4) : 0;
-        document.getElementById('qty-vu75').innerText = L75 > 0 ? Math.ceil(L75 / 1) : 0;
-        document.getElementById('qty-vu50').innerText = L50 > 0 ? Math.ceil(L50 / 1) : 0;
-
-        document.getElementById('parts-valve').innerText = valve;
-        document.getElementById('parts-union').innerText = union;
-        document.getElementById('parts-toko-s').innerText = tokoS;
-        document.getElementById('parts-kabe-l').innerText = kabeL;
+    // スナップ座標の取得
+    function getSnappedPos(x, y) {
+        if (!currentPageId) return {x, y};
+        const data = pageData[currentPageId];
+        // 20px以内にあるマスの中心を探す
+        const target = data.history.find(h => h.isMass && Math.sqrt((h.pos.x - x)**2 + (h.pos.y - y)**2) < 20);
+        return target ? {x: target.pos.x, y: target.pos.y} : {x, y};
     }
 
     function handleDraw(x, y, container) {
         const data = pageData[currentPageId];
+        const snapped = getSnappedPos(x, y);
+
         if(currentMode === 'calib') {
             if(!calibStart) calibStart = {x, y};
             else {
                 document.getElementById('scale-px').value = Math.sqrt((x-calibStart.x)**2 + (y-calibStart.y)**2);
-                alert("尺度設定完了"); calibStart = null; setMode('manual'); updateCounters();
+                alert("尺度設定完了"); calibStart = null; setMode('manual');
             }
             return;
         }
@@ -201,13 +172,40 @@
             const label = document.createElement('div'); label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
             label.style.transform = `rotate(-${currentRot}deg)`;
             m.appendChild(txt); m.appendChild(label); container.appendChild(m);
-            data.history.push({isMass:true, mode:massType, pos:{x,y}, pipeType:currentPipe, elements:[m]});
+            data.history.push({isMass:true, mode:massType, pos:{x,y}, elements:[m]});
         } else if(currentMode === 'manual') {
-            if(!manualStart) manualStart = {x, y};
-            else { createLine(manualStart.x, manualStart.y, x, y, container, currentPipe); manualStart = null; }
+            if(!manualStart) {
+                manualStart = snapped;
+                const preview = document.getElementById('line-preview');
+                preview.style.display = 'block';
+                preview.className = `pipe-line pipe-${currentPipe}`;
+            } else {
+                createLine(manualStart.x, manualStart.y, snapped.x, snapped.y, container, currentPipe);
+                manualStart = null;
+                document.getElementById('line-preview').style.display = 'none';
+            }
         }
         updateCounters();
     }
+
+    // プレビュー表示用
+    window.addEventListener('mousemove', (e) => {
+        if (currentMode === 'manual' && manualStart) {
+            const container = document.getElementById('container-' + currentPageId);
+            if (!container) return;
+            const rect = container.getBoundingClientRect();
+            const x = e.clientX - rect.left + container.scrollLeft;
+            const y = e.clientY - rect.top + container.scrollTop;
+            const snapped = getSnappedPos(x, y);
+            
+            const preview = document.getElementById('line-preview');
+            const dist = Math.sqrt((snapped.x - manualStart.x)**2 + (snapped.y - manualStart.y)**2);
+            preview.style.width = dist + 'px';
+            preview.style.left = (manualStart.x + rect.left - container.scrollLeft) + 'px';
+            preview.style.top = (manualStart.y + rect.top - container.scrollTop) + 'px';
+            preview.style.transform = `rotate(${Math.atan2(snapped.y - manualStart.y, snapped.x - manualStart.x)}rad) translateY(-50%)`;
+        }
+    });
 
     function createLine(x1, y1, x2, y2, container, type) {
         const dist = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
@@ -226,7 +224,6 @@
         canvas.addEventListener('mousedown', (ev) => handleDraw(ev.offsetX, ev.offsetY, container));
         container.appendChild(canvas); document.getElementById('canvas-area').appendChild(container);
         pageData[id] = { history:[] };
-        
         const tab = document.createElement('div'); tab.className='tab-btn'; tab.id='tab-'+id; tab.innerText=label;
         tab.onclick=()=>switchPage(id); document.getElementById('top-tabs').appendChild(tab);
     }
@@ -235,7 +232,7 @@
         const file = e.target.files[0]; if(!file) return;
         const reader = new FileReader();
         reader.onload = async function(){
-            document.getElementById('top-tabs').innerHTML = ''; document.getElementById('canvas-area').innerHTML = '';
+            document.getElementById('top-tabs').innerHTML = ''; document.getElementById('canvas-area').innerHTML = '<div id="line-preview"></div>';
             pageData = {};
             if(file.type==="application/pdf"){
                 const pdf = await pdfjsLib.getDocument({data: new Uint8Array(this.result)}).promise;
@@ -263,20 +260,41 @@
         document.getElementById('tab-'+id).classList.add('active');
     }
 
+    function updateCounters() {
+        const pxPerM = parseFloat(document.getElementById('scale-px').value) || 100;
+        const stats = { vu100:{l:0}, vu75:{l:0}, vu50:{l:0}, supply:{l:0}, hot:{l:0} };
+        let valve = 0, union = 0, tokoS = 0, kabeL = 0;
+
+        Object.values(pageData).forEach(data => {
+            data.history.forEach(h => {
+                if(h.isMass) {
+                    const cfg = MASS_CONFIG[h.mode];
+                    if(cfg) { valve += cfg.valve; union += cfg.union; tokoS += cfg.tokoS; kabeL += cfg.kabeL; }
+                }
+                if(h.len && stats[h.pipeType]) stats[h.pipeType].l += h.len;
+            });
+        });
+
+        const L100 = stats.vu100.l / pxPerM;
+        const L75 = stats.vu75.l / pxPerM;
+        const L50 = stats.vu50.l / pxPerM;
+        document.getElementById('len-vu100').innerText = L100.toFixed(1);
+        document.getElementById('len-vu75').innerText = L75.toFixed(1);
+        document.getElementById('len-vu50').innerText = L50.toFixed(1);
+        document.getElementById('len-supply').innerText = (stats.supply.l / pxPerM).toFixed(1);
+        document.getElementById('len-hot').innerText = (stats.hot.l / pxPerM).toFixed(1);
+        document.getElementById('qty-vu100').innerText = L100 > 0 ? Math.ceil(L100 / 4) : 0;
+        document.getElementById('qty-vu75').innerText = L75 > 0 ? Math.ceil(L75 / 1) : 0;
+        document.getElementById('qty-vu50').innerText = L50 > 0 ? Math.ceil(L50 / 1) : 0;
+        document.getElementById('parts-valve').innerText = valve;
+        document.getElementById('parts-union').innerText = union;
+        document.getElementById('parts-toko-s').innerText = tokoS;
+        document.getElementById('parts-kabe-l').innerText = kabeL;
+    }
+
     function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
     function saveAsImage() { html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download=`図面_${currentPageId}.jpg`; a.click(); }); }
-    function connectMasses() {
-        if (!currentPageId) return;
-        const data = pageData[currentPageId];
-        const container = document.getElementById('container-' + currentPageId);
-        const masses = data.history.filter(item => item.isMass && !MASS_CONFIG[item.mode].kigu);
-        for (let i = 0; i < masses.length - 1; i++) {
-            const s = masses[i].pos; const e = masses[i+1].pos;
-            createLine(s.x, s.y, e.x, s.y, container, currentPipe);
-            createLine(e.x, s.y, e.x, e.y, container, currentPipe);
-        }
-        updateCounters();
-    }
+    
     window.addEventListener('keydown', e => { 
         if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
         if(e.ctrlKey && e.key === 'z') undo(); 
