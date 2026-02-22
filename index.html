@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v10.10 Pro (Classic + Pen)</title>
+    <title>設備拾い出しツール v10.13 (Pen & Eraser Integrated)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -18,18 +18,17 @@
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* 自由手書き用レイヤー */
         .drawing-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+        /* SVG内のパスに対して、消しゴム用のマウス反応を許可する */
+        .drawing-svg path { pointer-events: visibleStroke; }
         #line-preview { position: absolute; height: 2px; background: rgba(0, 210, 255, 0.5); pointer-events: none; transform-origin: 0 50%; z-index: 101; display: none; }
 
-        /* 集計パネル（v10.4デザイン） */
         #counter-panel { position: absolute; top: 50px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 15px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 210px; }
         #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
         #panel-open { position: absolute; top: 50px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; }
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
         .cnt-val { font-weight: bold; color: #0f0; }
 
-        /* マス・配管（v10.4デザイン） */
         .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; }
         .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
         .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; border: 1px solid white; z-index: 30; }
@@ -40,20 +39,19 @@
         .pipe-supply { height: 4px; background: #007bff; }
         .pipe-hot    { height: 4px; background: #ff4757; }
 
-        /* サイドバー */
         .sidebar-section { margin-bottom: 12px; }
         .sidebar-title { font-size: 11px; font-weight: bold; color: #888; margin-bottom: 5px; border-bottom: 1px solid #444; }
         button { width: 100%; padding: 8px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; text-align: left; background: #444; color: #ccc; }
         button.active-sel { background: #007bff; color: white; border: 1px solid #fff; }
 
-        /* 新規：ペンパレット */
+        /* ペンパレット（改良版） */
         #pen-palette { display: none; background: #1a1a1a; padding: 8px; border-radius: 4px; margin-top: 5px; border: 1px solid #444; }
         .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
         .color-dot { height: 20px; border-radius: 3px; cursor: pointer; border: 1px solid #333; }
         .color-dot.active { border: 2px solid white; transform: scale(1.1); }
         .size-grid { display: flex; gap: 4px; }
-        .size-btn { flex: 1; padding: 4px; font-size: 9px; text-align: center; background: #444; border-radius: 3px; cursor: pointer; }
-        .size-btn.active { background: #28a745; color: white; }
+        .size-btn { flex: 1; padding: 6px 0; font-size: 9px; text-align: center; background: #444; border-radius: 3px; cursor: pointer; border: 1px solid #555; }
+        .size-btn.active { background: #28a745; color: white; border-color: white; }
     </style>
 </head>
 <body>
@@ -94,19 +92,23 @@
         <button id="mode-pen" onclick="setMode('pen')" style="background:#e67e22; color:white;">🖊 自由手書き (注記)</button>
         
         <div id="pen-palette">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:9px; color:#aaa;">ツール</span>
+                <button id="tool-eraser" onclick="setTool('eraser')" style="width:auto; padding:3px 8px; background:#555; font-size:9px; margin:0; text-align:center;">🧽 消しゴム</button>
+            </div>
             <div class="color-grid">
-                <div class="color-dot active" style="background:#000" onclick="updatePen('#000',null,this)"></div>
-                <div class="color-dot" style="background:#f00" onclick="updatePen('#f00',null,this)"></div>
-                <div class="color-dot" style="background:#00f" onclick="updatePen('#00f',null,this)"></div>
-                <div class="color-dot" style="background:#28a745" onclick="updatePen('#28a745',null,this)"></div>
-                <div class="color-dot" style="background:#ffc107" onclick="updatePen('#ffc107',null,this)"></div>
-                <div class="color-dot" style="background:#9c27b0" onclick="updatePen('#9c27b0',null,this)"></div>
-                <div class="color-dot" style="background:#fff" onclick="updatePen('#fff',null,this)"></div>
+                <div class="color-dot active" style="background:#000" onclick="setTool('pen'); updatePen('#000',null,this)"></div>
+                <div class="color-dot" style="background:#f00" onclick="setTool('pen'); updatePen('#f00',null,this)"></div>
+                <div class="color-dot" style="background:#00f" onclick="setTool('pen'); updatePen('#00f',null,this)"></div>
+                <div class="color-dot" style="background:#28a745" onclick="setTool('pen'); updatePen('#28a745',null,this)"></div>
+                <div class="color-dot" style="background:#ffc107" onclick="setTool('pen'); updatePen('#ffc107',null,this)"></div>
+                <div class="color-dot" style="background:#9c27b0" onclick="setTool('pen'); updatePen('#9c27b0',null,this)"></div>
+                <div class="color-dot" style="background:#fff" onclick="setTool('pen'); updatePen('#fff',null,this)"></div>
             </div>
             <div class="size-grid">
                 <div class="size-btn active" onclick="updatePen(null,2,this)">細</div>
-                <div class="size-btn" onclick="updatePen(null,5,this)">中</div>
-                <div class="size-btn" onclick="updatePen(null,12,this)">太</div>
+                <div class="size-btn" onclick="updatePen(null,6,this)">中</div>
+                <div class="size-btn" onclick="updatePen(null,14,this)">太</div>
             </div>
         </div>
     </div>
@@ -141,6 +143,7 @@
 
     let currentPageId = null, pageData = {};
     let currentPipe = 'vu100', currentMode = 'manual', massType = 'round', currentRot = 0;
+    let currentTool = 'pen'; // ペンか消しゴム
     let activePen = { color: '#000', width: 2 };
     let manualStart = null, calibStart = null, isMouseDown = false, currentPath = null;
 
@@ -155,17 +158,36 @@
     };
 
     function setPipe(p) { currentPipe = p; updateUI(); }
+    
     function setMode(m) { 
         currentMode = m; manualStart = null; calibStart = null; 
         document.getElementById('line-preview').style.display = 'none';
         document.getElementById('pen-palette').style.display = (m === 'pen') ? 'block' : 'none';
         updateUI(); 
     }
-    function updatePen(c, w, el) {
-        if(c) { activePen.color = c; document.querySelectorAll('.color-dot').forEach(d=>d.classList.remove('active')); el.classList.add('active'); }
-        if(w) { activePen.width = w; document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); }
+
+    function setTool(t) {
+        currentTool = t;
+        const eraserBtn = document.getElementById('tool-eraser');
+        eraserBtn.style.background = (t === 'eraser') ? '#ff4757' : '#555';
     }
+
+    function updatePen(c, w, el) {
+        if(c) { 
+            activePen.color = c; 
+            setTool('pen'); 
+            document.querySelectorAll('.color-dot').forEach(d=>d.classList.remove('active')); 
+            el.classList.add('active'); 
+        }
+        if(w) { 
+            activePen.width = w; 
+            document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active')); 
+            el.classList.add('active'); 
+        }
+    }
+
     function setMassType(t) { massType = t; currentMode = 'mass'; updateUI(); }
+    
     function togglePanel(show) {
         document.getElementById('counter-panel').style.display = show ? 'block' : 'none';
         document.getElementById('panel-open').style.display = show ? 'none' : 'block';
@@ -268,12 +290,22 @@
 
         canvas.addEventListener('mousedown', (ev) => {
             if(currentMode === 'pen') {
+                if(currentTool === 'eraser') return;
                 isMouseDown = true;
                 currentPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 currentPath.setAttribute("fill", "none"); currentPath.setAttribute("stroke", activePen.color);
                 currentPath.setAttribute("stroke-width", activePen.width); currentPath.setAttribute("stroke-linecap", "round");
                 currentPath.setAttribute("stroke-linejoin", "round");
                 currentPath.setAttribute("d", `M ${ev.offsetX} ${ev.offsetY}`);
+                
+                // 消しゴム判定
+                currentPath.addEventListener('mouseenter', (e) => {
+                    if(isMouseDown && currentTool === 'eraser') e.target.remove();
+                });
+                currentPath.onclick = (e) => {
+                    if(currentTool === 'eraser') e.target.remove();
+                };
+
                 svg.appendChild(currentPath);
                 pageData[id].history.push({elements:[currentPath]});
             } else {
@@ -347,7 +379,15 @@
     }
 
     function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
-    function saveAsImage() { html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download=`図面_${currentPageId}.jpg`; a.click(); }); }
+    
+    function saveAsImage() { 
+        html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { 
+            const a = document.createElement('a'); 
+            a.href=canvas.toDataURL("image/jpeg",0.9); 
+            a.download=`拾い出し_${currentPageId}.jpg`; 
+            a.click(); 
+        }); 
+    }
     
     window.addEventListener('keydown', e => { 
         if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
