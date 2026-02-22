@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>設備拾い出しツール v9.5 Pro</title>
+    <title>設備拾い出しツール v9.7 Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -15,19 +15,20 @@
         .page-container.active { display: block; }
         canvas { display: block; cursor: crosshair; }
         
-        /* 集計パネル（×ボタン付き） */
-        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.9); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 180px; line-height: 1.6; }
-        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; line-height: 18px; text-align: center; padding: 0; }
-        #panel-open { position: absolute; top: 10px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
+        #counter-panel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.95); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 11px; z-index: 2000; min-width: 200px; line-height: 1.6; }
+        #panel-close { position: absolute; top: 5px; right: 5px; cursor: pointer; background: #ff4757; border: none; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; line-height: 18px; text-align: center; }
+        #panel-open { position: absolute; top: 10px; right: 10px; display: none; background: #28a745; color: white; padding: 5px 12px; border-radius: 5px; cursor: pointer; z-index: 1999; font-size: 12px; }
         .cnt-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; margin-bottom: 2px; }
         .cnt-val { font-weight: bold; color: #0f0; }
         .cnt-sub { color: #ff9800; font-weight: bold; }
 
-        /* デザイン */
-        .mass-base { position: absolute; width: 26px; height: 26px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 10px; font-weight: bold; }
-        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; }
-        .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; }
-        .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; }
+        /* マスマーク */
+        .mass-base { position: absolute; width: 28px; height: 28px; border: 2px solid #333; border-radius: 50%; background: white; transform: translate(-50%, -50%); pointer-events: none; z-index: 20; display: flex; align-items: center; justify-content: center; color: #333; font-size: 11px; font-weight: bold; overflow: visible; }
+        .mass-branch::after { content: ""; position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: #333; border-radius: 0 0 100% 0; z-index: -1; }
+        /* 文字だけ回転を打ち消すためのクラス */
+        .inner-text { display: block; transform-origin: center center; }
+        .mass-num-label { position: absolute; top: -12px; right: -12px; background: #e91e63; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 9px; text-align: center; line-height: 16px; font-weight: bold; border: 1px solid white; z-index: 30; }
+        .mass-kigu { border-radius: 4px; background: #fffde7; border: 2px solid #fbc02d; width: 32px; height: 32px; }
 
         .pipe-line { position: absolute; transform-origin: 0 50%; pointer-events: none; opacity: 0.8; z-index: 5; }
         .pipe-vu100 { height: 10px; background: #28a745; }
@@ -39,7 +40,7 @@
 
         .sidebar-section { margin-bottom: 12px; }
         .sidebar-title { font-size: 11px; font-weight: bold; color: #888; margin-bottom: 5px; border-bottom: 1px solid #444; }
-        button { width: 100%; padding: 7px; margin-bottom: 3px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; text-align: left; background: #444; color: #ccc; }
+        button { width: 100%; padding: 8px; margin-bottom: 4px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; text-align: left; background: #444; color: #ccc; }
         button.active-sel { background: #007bff; color: white; border: 1px solid #fff; }
     </style>
 </head>
@@ -56,9 +57,10 @@
     <div class="cnt-row"><span>給湯 HT:</span> <span><span id="len-hot" class="cnt-val">0.0</span>m</span></div>
     
     <div style="font-weight:bold; color:#ff9800; border-bottom:1px solid #ff9800; margin-top:8px; margin-bottom:5px;">【器具部品】</div>
-    <div class="cnt-row"><span>止水栓/ニップル:</span> <span id="parts-valve" class="cnt-sub">0</span> ヶ</div>
+    <div class="cnt-row"><span>バルブ:</span> <span id="parts-valve" class="cnt-sub">0</span> ヶ</div>
     <div class="cnt-row"><span>ユニオン:</span> <span id="parts-union" class="cnt-sub">0</span> ヶ</div>
-    <div class="cnt-row"><span>排水トラップ:</span> <span id="parts-trap" class="cnt-sub">0</span> ヶ</div>
+    <div class="cnt-row"><span>床座水S:</span> <span id="parts-toko-s" class="cnt-sub">0</span> ヶ</div>
+    <div class="cnt-row"><span>壁座水L:</span> <span id="parts-kabe-l" class="cnt-sub">0</span> ヶ</div>
 </div>
 
 <div id="sidebar">
@@ -72,17 +74,18 @@
     </div>
 
     <div class="sidebar-section">
-        <div class="sidebar-title">排水マス (Rで分岐回転)</div>
+        <div class="sidebar-title">排水マス (Rで回転)</div>
         <button id="mtype-round" class="active-sel" onclick="setMassType('round')">○ 中間/起点マス</button>
         <button id="mtype-branch" onclick="setMassType('branch')">◑ 分岐マス</button>
     </div>
 
     <div class="sidebar-section">
-        <div class="sidebar-title">器具セット</div>
-        <button id="mtype-wash" onclick="setMassType('wash')">🚿 洗面</button>
-        <button id="mtype-bath" onclick="setMassType('bath')">🛁 風呂</button>
-        <button id="mtype-sink" onclick="setMassType('sink')">🍽 キッチン</button>
-        <button id="mtype-laundry" onclick="setMassType('laundry')">🧺 洗濯機</button>
+        <div class="sidebar-title">器具セット (自動部品)</div>
+        <button id="mtype-wash" onclick="setMassType('wash')">🚿 洗面 (バルブ2)</button>
+        <button id="mtype-bath" onclick="setMassType('bath')">🛁 風呂 (ユニオン2)</button>
+        <button id="mtype-sink" onclick="setMassType('sink')">🍽 キッチン (バルブ2)</button>
+        <button id="mtype-toilet" onclick="setMassType('toilet')">🚽 トイレ (床座水S1)</button>
+        <button id="mtype-laundry" onclick="setMassType('laundry')">🧺 洗濯機 (壁座水L1)</button>
     </div>
 
     <div class="sidebar-section">
@@ -94,15 +97,8 @@
         <button id="pipe-hot" onclick="setPipe('hot')">🟥 給湯 HT</button>
     </div>
 
-    <div class="sidebar-section">
-        <div class="sidebar-title">描画モード</div>
-        <button id="mode-pen" onclick="setMode('pen')">🖊 自由手書き</button>
-        <button id="mode-manual" onclick="setMode('manual')">📏 手動配管</button>
-    </div>
-
     <button style="background:#ff9800;color:#000;text-align:center;margin-top:10px;" onclick="connectMasses()">⚡ マスを自動接続</button>
-    <button onclick="undo()" style="background:#6c757d;color:white;text-align:center">↩ 1つ戻す (Ctrl+Z)</button>
-    <button onclick="saveAsImage()" style="background:#28a745;color:white;text-align:center">📸 画像として保存</button>
+    <button onclick="undo()" style="background:#6c757d;color:white;text-align:center">↩ 戻す (Ctrl+Z)</button>
 </div>
 
 <div id="main-content">
@@ -116,19 +112,20 @@
 
     let currentPageId = null, pageData = {};
     let currentPipe = 'vu100', currentMode = 'mass', massType = 'round', currentRot = 0;
-    let manualStart = null, isDrawing = false, currentPath = null, calibStart = null;
+    let manualStart = null, calibStart = null;
 
     const MASS_CONFIG = {
-        round: { label: '', valves: 0, unions: 0, traps: 0, kigu: false },
-        branch: { label: '', valves: 0, unions: 0, traps: 0, kigu: false },
-        wash: { label: '洗', valves: 2, unions: 0, traps: 0, kigu: true },
-        bath: { label: '風', valves: 0, unions: 2, traps: 0, kigu: true },
-        sink: { label: '台', valves: 2, unions: 0, traps: 0, kigu: true },
-        laundry: { label: '機', valves: 1, unions: 0, traps: 1, kigu: true }
+        round: { label: '', valve: 0, union: 0, tokoS: 0, kabeL: 0, kigu: false },
+        branch: { label: '', valve: 0, union: 0, tokoS: 0, kabeL: 0, kigu: false },
+        wash: { label: '洗', valve: 2, union: 0, tokoS: 0, kabeL: 0, kigu: true },
+        bath: { label: '風', valve: 0, union: 2, tokoS: 0, kabeL: 0, kigu: true },
+        sink: { label: '台', valve: 2, union: 0, tokoS: 0, kabeL: 0, kigu: true },
+        toilet: { label: '便', valve: 0, union: 0, tokoS: 1, kabeL: 0, kigu: true },
+        laundry: { label: '機', valve: 0, union: 0, tokoS: 0, kabeL: 1, kigu: true }
     };
 
     function setPipe(p) { currentPipe = p; updateUI(); }
-    function setMode(m) { currentMode = m; manualStart = null; calibStart = null; updateUI(); }
+    function setMode(m) { currentMode = m; updateUI(); }
     function setMassType(t) { massType = t; currentMode = 'mass'; updateUI(); }
     function togglePanel(show) {
         document.getElementById('counter-panel').style.display = show ? 'block' : 'none';
@@ -139,20 +136,19 @@
         document.querySelectorAll('button').forEach(b => b.classList.remove('active-sel'));
         document.getElementById('pipe-'+currentPipe)?.classList.add('active-sel');
         document.getElementById('mtype-'+massType)?.classList.add('active-sel');
-        if(currentMode==='pen' || currentMode==='manual') document.getElementById('mode-'+currentMode).classList.add('active-sel');
     }
 
     function updateCounters() {
         const pxPerM = parseFloat(document.getElementById('scale-px').value) || 100;
         const stats = { vu100:{l:0, q:0}, vu75:{l:0, q:0}, vu50:{l:0, q:0}, supply:{l:0}, hot:{l:0} };
-        let valves = 0, unions = 0, traps = 0;
+        let valve = 0, union = 0, tokoS = 0, kabeL = 0;
 
         Object.values(pageData).forEach(data => {
             data.history.forEach(h => {
                 if(h.isMass) {
                     if(!h.isKigu && stats[h.pipeType]) stats[h.pipeType].q++;
                     const cfg = MASS_CONFIG[h.mode];
-                    if(cfg) { valves += cfg.valves; unions += cfg.unions; traps += cfg.traps; }
+                    if(cfg) { valve += cfg.valve; union += cfg.union; tokoS += cfg.tokoS; kabeL += cfg.kabeL; }
                 }
                 if(h.len && stats[h.pipeType]) stats[h.pipeType].l += h.len;
             });
@@ -164,9 +160,10 @@
         });
         document.getElementById('len-supply').innerText = (stats.supply.l / pxPerM).toFixed(1);
         document.getElementById('len-hot').innerText = (stats.hot.l / pxPerM).toFixed(1);
-        document.getElementById('parts-valve').innerText = valves;
-        document.getElementById('parts-union').innerText = unions;
-        document.getElementById('parts-trap').innerText = traps;
+        document.getElementById('parts-valve').innerText = valve;
+        document.getElementById('parts-union').innerText = union;
+        document.getElementById('parts-toko-s').innerText = tokoS;
+        document.getElementById('parts-kabe-l').innerText = kabeL;
     }
 
     function handleDraw(x, y, container) {
@@ -185,14 +182,22 @@
             m.className = `mass-base mass-${massType} ${cfg.kigu ? 'mass-kigu' : ''}`;
             m.style.left = x + 'px'; m.style.top = y + 'px';
             m.style.transform = `translate(-50%, -50%) rotate(${currentRot}deg)`;
-            m.innerText = cfg.label;
+            
+            // 文字要素を作成し、マークの回転を打ち消す
+            const txt = document.createElement('span');
+            txt.className = 'inner-text';
+            txt.innerText = cfg.label;
+            txt.style.transform = `rotate(-${currentRot}deg)`; // 逆回転させて上を向かせる
+            
             const label = document.createElement('div');
-            label.className = 'mass-num-label'; label.innerText = data.history.filter(i=>i.isMass).length + 1;
-            m.appendChild(label); container.appendChild(m);
-            data.history.push({isMass:true, isKigu:cfg.kigu, mode:massType, pos:{x,y}, rot:currentRot, pipeType:currentPipe, elements:[m]});
-        } else if(currentMode === 'manual') {
-            if(!manualStart) manualStart = {x, y};
-            else { createLine(manualStart.x, manualStart.y, x, y, container, currentPipe); manualStart = null; }
+            label.className = 'mass-num-label'; 
+            label.innerText = data.history.filter(i=>i.isMass).length + 1;
+            label.style.transform = `rotate(-${currentRot}deg)`; // 番号も上を向かせる
+
+            m.appendChild(txt);
+            m.appendChild(label);
+            container.appendChild(m);
+            data.history.push({isMass:true, mode:massType, pos:{x,y}, pipeType:currentPipe, elements:[m]});
         }
         updateCounters();
     }
@@ -212,7 +217,7 @@
         if (!currentPageId) return;
         const data = pageData[currentPageId];
         const container = document.getElementById('container-' + currentPageId);
-        const masses = data.history.filter(item => item.isMass && !item.isKigu);
+        const masses = data.history.filter(item => item.isMass && !MASS_CONFIG[item.mode].kigu);
         for (let i = 0; i < masses.length - 1; i++) {
             const s = masses[i].pos; const e = masses[i+1].pos;
             createLine(s.x, s.y, e.x, s.y, container, currentPipe);
@@ -224,26 +229,8 @@
     function createPageUI(id, topTabs, canvasArea) {
         const container = document.createElement('div'); container.id='container-'+id; container.className='page-container';
         const canvas = document.createElement('canvas'); canvas.id='canvas-'+id;
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "drawing-layer");
-        canvas.addEventListener('mousedown', (ev) => {
-            if(currentMode === 'pen') {
-                isDrawing = true;
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                const color = currentPipe==='supply'?'#007bff':currentPipe==='hot'?'#ff4757':'#28a745';
-                path.setAttribute("stroke", color); path.setAttribute("stroke-width", "3"); path.setAttribute("fill", "none");
-                path.setAttribute("d", `M ${ev.offsetX} ${ev.offsetY}`);
-                svg.appendChild(path); currentPath = path;
-                pageData[id].history.push({isMass:false, pipeType:currentPipe, elements:[path], len:0});
-            } else { handleDraw(ev.offsetX, ev.offsetY, container); }
-        });
-        window.addEventListener('mousemove', (ev) => {
-            if(!isDrawing || currentMode !== 'pen' || !currentPath) return;
-            const rect = canvas.getBoundingClientRect();
-            currentPath.setAttribute("d", `${currentPath.getAttribute("d")} L ${ev.clientX - rect.left} ${ev.clientY - rect.top}`);
-        });
-        window.addEventListener('mouseup', () => isDrawing = false);
-        container.appendChild(canvas); container.appendChild(svg); canvasArea.appendChild(container);
+        canvas.addEventListener('mousedown', (ev) => handleDraw(ev.offsetX, ev.offsetY, container));
+        container.appendChild(canvas); canvasArea.appendChild(container);
         pageData[id] = { history:[] };
         const tab = document.createElement('div'); tab.innerText=id; tab.style.padding='10px'; tab.style.cursor='pointer'; tab.onclick=()=>switchPage(id); topTabs.appendChild(tab);
     }
@@ -272,8 +259,10 @@
 
     function switchPage(id) { currentPageId = id; document.querySelectorAll('.page-container').forEach(e=>e.classList.remove('active')); document.getElementById('container-'+id).classList.add('active'); }
     function undo() { if(!currentPageId) return; const h = pageData[currentPageId].history; if(h.length>0) h.pop().elements.forEach(e=>e.remove()); updateCounters(); }
-    function saveAsImage() { html2canvas(document.getElementById('container-'+currentPageId), {scale:2}).then(canvas => { const a = document.createElement('a'); a.href=canvas.toDataURL("image/jpeg",0.9); a.download="設備拾い出し.jpg"; a.click(); }); }
-    window.addEventListener('keydown', e => { if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; if(e.ctrlKey && e.key === 'z') undo(); });
+    window.addEventListener('keydown', e => { 
+        if(e.key === 'r' || e.key === 'R') currentRot = (currentRot + 90) % 360; 
+        if(e.ctrlKey && e.key === 'z') undo(); 
+    });
 </script>
 </body>
 </html>
